@@ -585,6 +585,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </Link>
             )}
 
+            {/* Version display - Client mode only */}
+            {isClientMode && !sidebarCollapsed && (
+              <div className="px-3 pt-2 text-xs text-gray-400 dark:text-gray-500" title="Version installée">
+                v{frontendVersion}
+              </div>
+            )}
+
             {/* Logout button - Server mode only */}
             {isServerMode && user && (
               <button
@@ -897,6 +904,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <SlidersHorizontal size={20} />
               <span className="font-medium">Préférences</span>
             </Link>
+          )}
+
+          {/* Version display - Client mode only */}
+          {isClientMode && (
+            <div className="px-3 py-1 text-xs text-gray-400 dark:text-gray-500">
+              v{frontendVersion}
+            </div>
           )}
 
           <button

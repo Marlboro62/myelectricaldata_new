@@ -2,6 +2,8 @@ from typing import Any, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime, date
 
+from ..config.version import APP_VERSION
+
 
 class ErrorDetail(BaseModel):
     code: str
@@ -20,7 +22,7 @@ class APIResponse(BaseModel):
 
 class HealthCheckResponse(BaseModel):
     status: str = "ok"
-    version: str = "1.5.15"
+    version: str = APP_VERSION
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
