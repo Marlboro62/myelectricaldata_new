@@ -587,7 +587,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             {/* Version display - Client mode only */}
             {isClientMode && !sidebarCollapsed && (
-              <div className="px-3 pt-2 text-xs text-gray-400 dark:text-gray-500" title="Version installée">
+              <div data-app-version className="px-3 pt-2 text-xs text-gray-400 dark:text-gray-500" title="Version installée">
                 v{frontendVersion}
               </div>
             )}
@@ -908,7 +908,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Version display - Client mode only */}
           {isClientMode && (
-            <div className="px-3 py-1 text-xs text-gray-400 dark:text-gray-500">
+            <div data-app-version className="px-3 py-1 text-xs text-gray-400 dark:text-gray-500">
               v{frontendVersion}
             </div>
           )}
