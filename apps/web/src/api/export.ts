@@ -6,6 +6,12 @@
 
 import { apiClient } from './client'
 
+// Same resolution as the axios client: the runtime value (window.__ENV__) wins over the
+// build-time one, so EventSource URLs follow a reverse proxy / sub-path like other API calls
+const API_BASE_URL = (
+  window.__ENV__?.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '/api'
+).replace(/\/+$/, '')
+
 export type ExportType = 'home_assistant' | 'mqtt' | 'victoriametrics'
 
 export interface HomeAssistantConfig {
@@ -299,7 +305,7 @@ export const exportApi = {
     onError: (error: string) => void,
     onEDProgress?: (event: ExportRunEDProgressEvent) => void,
   ): EventSource => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const baseUrl = API_BASE_URL
     const url = `${baseUrl}/export/configs/${configId}/run/stream`
 
     const eventSource = new EventSource(url)
@@ -414,7 +420,7 @@ export const exportApi = {
     onComplete: (result: HAStatisticsImportResponse) => void,
     onError: (error: string) => void
   ): EventSource => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const baseUrl = API_BASE_URL
     const url = `${baseUrl}/export/configs/${configId}/ha-statistics/import/stream?clear_first=${clearFirst}&sync_delay_ms=${syncDelayMs}&chunk_size=${chunkSize}&incremental=${incremental}`
 
     const eventSource = new EventSource(url)
