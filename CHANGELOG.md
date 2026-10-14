@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.0...2.5.1) (2026-10-14)
+
+### Bug Fixes
+
+* **export:** support MQTT in scheduler and correct models imports in mqtt exporter ([93273cd](https://github.com/MyElectricalData/myelectricaldata_new/commit/93273cd0ebf0e17315d3a386139d60f36c12ba65))
+* **web:** prise en compte du pas par point (PT15M/PT30M) dans les calculs de consommation ([bd813ff](https://github.com/MyElectricalData/myelectricaldata_new/commit/bd813ffc991fde25b1b3c00e785f421c1db6861e))
+
 ## [2.5.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.4.4...2.5.0) (2026-10-14)
 
 ### Features
