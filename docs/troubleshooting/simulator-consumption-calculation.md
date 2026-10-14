@@ -33,20 +33,15 @@ const totalKwh = allConsumption.reduce(
 Appliquer la formule de conversion W → Wh en utilisant l'`interval_length` de chaque mesure :
 
 ```typescript
-// ✅ CORRECT
-const intervalLength = reading.interval_length || "PT30M";
-const intervalMatch = intervalLength.match(/PT(\d+)M/);
-const intervalMinutes = intervalMatch ? parseInt(intervalMatch[1]) : 30;
-
-const valueW = parseFloat(reading.value);
-const valueWh = valueW / (60 / intervalMinutes); // Conversion W → Wh
+// ✅ CORRECT : helper partagé (apps/web/src/utils/enedisMeasure.ts)
+const valueWh = readingEnergyWh(reading, unit, intervalLength); // W × durée du pas du relevé
 
 allConsumption.push({
   value: valueWh, // Valeur en Wh
 });
 ```
 
-**Formule** : `Wh = W / (60 / interval_minutes)`
+**Formule** : `Wh = W × durée_du_pas(h)` (anciennement `W / (60 / interval_minutes)`)
 
 Pour PT30M (30 minutes) : `Wh = W / 2`
 
@@ -188,13 +183,8 @@ Récupérer l'`interval_length` **pour chaque mesure individuelle** :
 ```typescript
 // ✅ CORRECT
 periodData.meter_reading.interval_reading.forEach((reading: any) => {
-  // Récupération de l'intervalle POUR CETTE mesure
-  const intervalLength = reading.interval_length || "PT30M";
-  const intervalMatch = intervalLength.match(/PT(\d+)M/);
-  const intervalMinutes = intervalMatch ? parseInt(intervalMatch[1]) : 30;
-
-  // Conversion W → Wh avec l'intervalle spécifique
-  const valueWh = parseFloat(reading.value) / (60 / intervalMinutes);
+  // Conversion W → Wh avec l'intervalle de CETTE mesure (celui du relevé, sinon celui de la mesure)
+  const valueWh = readingEnergyWh(reading, unit, intervalLength);
 
   allConsumption.push({ value: valueWh });
 });
@@ -243,10 +233,10 @@ async def increment_and_check(self, user_id: str, cache_used: bool, is_admin: bo
 
 ```typescript
 // Template de conversion
-const intervalLength = reading.interval_length || "PT30M";
-const intervalMinutes = parseInt(intervalLength.match(/PT(\d+)M/)?.[1] || "30");
-const valueWh = parseFloat(reading.value) / (60 / intervalMinutes);
+const valueWh = readingEnergyWh(reading, unit, intervalLength);
 ```
+
+La même règle vaut pour toutes les pages (kWh, Euro, HC/HP, Production, Bilan, Simulateur) : ne jamais appliquer à toute la courbe le pas de son premier point (MED-24, compteur reconfiguré PT30M → PT10M, passage en PT15M).
 
 ### 2. Toujours chevaucher les périodes d'API
 
