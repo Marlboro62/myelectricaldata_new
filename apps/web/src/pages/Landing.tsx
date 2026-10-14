@@ -437,7 +437,7 @@ export default function Landing() {
             </div>
             <div className="p-6 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 transform hover:scale-105 group">
               <Zap className="w-12 h-12 mx-auto mb-4 text-primary-600 dark:text-primary-400" />
-              <AnimatedCounter end={500} suffix="/j" />
+              <AnimatedCounter end={1000} suffix="/j" />
               <p className="text-gray-600 dark:text-gray-400 mt-2">Requêtes avec cache</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 Enedis limite à 5/s, notre cache vous libère !
@@ -737,7 +737,7 @@ export default function Landing() {
                   <ul className="space-y-3 text-gray-700 dark:text-gray-300 text-base">
                     <li className="flex items-start gap-2">
                       <span className="text-blue-600 dark:text-blue-400 mt-1">•</span>
-                      <span><strong>Cache passerelle</strong> : vos données sont stockées de manière chiffrée sur la passerelle avec une durée de vie de <strong>24h</strong>. Ce cache permet jusqu'à <strong className="text-blue-600 dark:text-blue-400">500 appels/jour</strong> (obligatoire pour l'utilisation de l'interface web).</span>
+                      <span><strong>Cache passerelle</strong> : vos données sont stockées de manière chiffrée sur la passerelle avec une durée de vie de <strong>24h</strong>. Il est <strong>activé par défaut</strong> et permet jusqu'à <strong className="text-blue-600 dark:text-blue-400">1000 appels/jour</strong>.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-blue-600 dark:text-blue-400 mt-1">•</span>
@@ -746,8 +746,8 @@ export default function Landing() {
                   </ul>
                   <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded">
                     <p className="text-gray-700 dark:text-gray-300 text-sm">
-                      <strong className="text-amber-700 dark:text-amber-400">Note importante :</strong> Le cache passerelle est <strong>obligatoire</strong> dès que vous utilisez l'interface web (bouton "Récupérer les données chez Enedis").
-                      Si vous utilisez uniquement le client auto-hébergé sans cache passerelle, vous êtes limité à <strong className="text-amber-700 dark:text-amber-400">50 appels/jour</strong> au lieu de 500.
+                      <strong className="text-amber-700 dark:text-amber-400">Changement :</strong> le cache passerelle est désormais <strong>activé par défaut</strong>, y compris pour le client auto-hébergé et les scripts qui ne précisent rien.
+                      Pour forcer des données fraîches chez Enedis, ajoutez <code>use_cache=false</code> à l'appel : ces appels restent limités à <strong className="text-amber-700 dark:text-amber-400">50 par jour</strong>.
                     </p>
                   </div>
                 </div>

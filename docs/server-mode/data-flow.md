@@ -43,7 +43,8 @@ Cache Layer (Redis)
 ├─ consumption:daily:{pdl}:{date}
 ├─ consumption:reading_type:{pdl}
 ├─ rate_limit:{user_id}:cached:{date}
-└─ rate_limit:{user_id}:no_cache:{date}
+├─ rate_limit:{user_id}:no_cache:{date}
+└─ rate_limit_warned:{user_id}:{cached|no_cache}:{date}   (first refusal of the day logged once)
 
 Enedis API (Sandbox/Production)
 ├─ OAuth2 endpoints
@@ -168,6 +169,12 @@ PERIOD: end is EXCLUDED, like Enedis dateFin
    [start, end[ ; end is capped to today (Paris), so end=today serves up to J-1
    (the web front keeps inclusive dates in its UI and sends end + 1 day)
 
+USE_CACHE: true by default on every Enedis route (MED-43). A caller that sends nothing
+   (self-hosted container <= 2.1.x, third-party script) goes through the cache and the
+   with-cache quota (1000/day) ; use_cache=false fetches fresh data from Enedis and
+   counts against the no-cache quota (50/day). The first refused call of the day logs
+   one WARNING "[RATE LIMIT] Quota journalier ... atteint" per user and quota type.
+
 GRANULAR DAILY CACHING
 1. User requests: GET /consumption/daily/12345678901234?start=2024-01-01&end=2025-01-01&use_cache=true
 
@@ -206,6 +213,10 @@ PRODUCTION (/production/daily, /production/detail), same per-day logic as /power
    is an error for the whole range : its days are never marked empty, but the exact
    range is remembered 24 hours ({prefix}:{pdl}:error:{start}:{end}) so that a client
    resyncing the same windows does not call Enedis each time
+   an HTTP 400 refusal of a range (load curve without history, history limit) is
+   remembered the same way, for the exact range only ; 404 (J-1 not yet published),
+   429 and server errors are never remembered
+   (/power, /production/daily, /production/detail)
 
 CACHE TTL: 86400 seconds (24 hours)
 ENCRYPTION: user.client_secret
