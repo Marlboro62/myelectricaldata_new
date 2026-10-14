@@ -50,7 +50,7 @@ L'intégration MQTT permet de publier vos données vers n'importe quel broker MQ
 ## Configuration
 
 Dans l'interface web : **Exporter** > **MQTT**, puis **Tester la connexion** et **Sauvegarder**.
-L'export se lance depuis cette page (les exports MQTT ne sont pas encore planifiés).
+L'export se lance à la main depuis cette page, ou automatiquement : la section **Planification automatique** prend un intervalle en minutes (15 minimum, vide = manuel). Un export planifié publie les mêmes topics que l'export manuel ; il se relance aussi après chaque synchronisation des PDL, et son dernier statut s'affiche sur la page.
 
 | Champ | Défaut | Description |
 |-------|--------|-------------|
