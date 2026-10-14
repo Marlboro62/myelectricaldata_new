@@ -205,6 +205,10 @@ class HomeAssistantExporter(BaseExporter):
     Creates entities with proper unique_id and device grouping under "MyElectricalData".
     """
 
+    # Version de Home Assistant, lue dans le message auth_ok à chaque connexion WebSocket
+    # (None tant qu'aucune connexion n'a eu lieu : traitée comme une version récente)
+    _ha_version: str | None = None
+
     def _validate_config(self) -> None:
         """Validate Home Assistant MQTT configuration"""
         if not self.config.get("mqtt_broker"):
@@ -2615,7 +2619,7 @@ class HomeAssistantExporter(BaseExporter):
         total_imported = 0
         errors: list[str] = []
         msg_id = msg_id_start
-        metadata = _with_statistics_metadata(metadata, getattr(self, "_ha_version", None))
+        metadata = _with_statistics_metadata(metadata, self._ha_version)
 
         # Si stats est vide, envoyer quand même pour créer l'entité dans HA
         if not stats:
@@ -2709,7 +2713,7 @@ class HomeAssistantExporter(BaseExporter):
                 await ws.send(json.dumps({"type": "auth", "access_token": token}))
                 auth_result = json.loads(await ws.recv())
 
-                self._ha_version = auth_result.get("ha_version") or getattr(self, "_ha_version", None)
+                self._ha_version = auth_result.get("ha_version") or self._ha_version
                 if auth_result.get("type") != "auth_ok":
                     return {
                         "success": False,
@@ -2834,7 +2838,7 @@ class HomeAssistantExporter(BaseExporter):
                 await ws.send(json.dumps({"type": "auth", "access_token": token}))
                 auth_result = json.loads(await ws.recv())
 
-                self._ha_version = auth_result.get("ha_version") or getattr(self, "_ha_version", None)
+                self._ha_version = auth_result.get("ha_version") or self._ha_version
                 if auth_result.get("type") != "auth_ok":
                     return failure(f"Authentification échouée: {auth_result.get('message', 'Unknown error')}")
 
@@ -3158,7 +3162,7 @@ class HomeAssistantExporter(BaseExporter):
                 await ws.send(json.dumps({"type": "auth", "access_token": token}))
                 auth_result = json.loads(await ws.recv())
 
-                self._ha_version = auth_result.get("ha_version") or getattr(self, "_ha_version", None)
+                self._ha_version = auth_result.get("ha_version") or self._ha_version
                 if auth_result.get("type") != "auth_ok":
                     return {
                         "success": False,
@@ -3295,7 +3299,7 @@ class HomeAssistantExporter(BaseExporter):
                 await ws.send(json.dumps({"type": "auth", "access_token": token}))
                 auth_result = json.loads(await ws.recv())
 
-                self._ha_version = auth_result.get("ha_version") or getattr(self, "_ha_version", None)
+                self._ha_version = auth_result.get("ha_version") or self._ha_version
                 if auth_result.get("type") != "auth_ok":
                     return {
                         "success": False,
@@ -3552,7 +3556,7 @@ class HomeAssistantExporter(BaseExporter):
                 await ws.send(json.dumps({"type": "auth", "access_token": token}))
                 auth_result = json.loads(await ws.recv())
 
-                self._ha_version = auth_result.get("ha_version") or getattr(self, "_ha_version", None)
+                self._ha_version = auth_result.get("ha_version") or self._ha_version
                 if auth_result.get("type") != "auth_ok":
                     return {
                         "success": False,
