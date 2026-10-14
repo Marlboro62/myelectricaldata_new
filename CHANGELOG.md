@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.3](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.2...2.5.3) (2026-10-14)
+
+### Refactoring
+
+* **export:** MED-48 / déclarer _ha_version sur HomeAssistantExporter ([cafa022](https://github.com/MyElectricalData/myelectricaldata_new/commit/cafa022faee5e848b88ad2874992b61142082454))
+
 ## [2.5.2](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.1...2.5.2) (2026-10-14)
 
 ### Bug Fixes
