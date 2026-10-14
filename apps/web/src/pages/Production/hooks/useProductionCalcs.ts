@@ -19,7 +19,8 @@ export function useProductionCalcs({
     }
 
     const readings = getReadings(productionData)
-    const unit = getUnit(productionData) || 'W'
+    // Mesure quotidienne : énergie en Wh, jamais multipliée par le pas (MED-24)
+    const unit = getUnit(productionData) || 'Wh'
     const intervalLength = getIntervalLength(productionData) || 'P1D'
 
 

@@ -72,9 +72,17 @@ export function getIntervalLength(data: unknown): string | undefined {
 export function intervalToHours(interval?: string): number | undefined {
   const match = interval?.match(/^P(?:(\d+)D|T(\d+)([HM]))$/)
   if (!match) return undefined
-  if (match[1]) return parseInt(match[1], 10) * 24
-  const value = parseInt(match[2], 10)
-  return match[3] === 'H' ? value : value / 60
+  const hours = match[1] ? parseInt(match[1], 10) * 24 : parseInt(match[2], 10) / (match[3] === 'H' ? 1 : 60)
+  // Pas nul (PT0M) : illisible, la chaîne de repli prend le relais (pas de division par zéro)
+  return hours > 0 ? hours : undefined
+}
+
+/** Pas distincts des relevés d'une mesure (plusieurs : le compteur a changé de pas sur la période) */
+export function getIntervalLengths(data: unknown): string[] {
+  const fallback = getIntervalLength(data)
+  return Array.from(
+    new Set(getReadings(data).map((reading) => reading.interval_length ?? fallback).filter((p): p is string => !!p)),
+  )
 }
 
 // Pas historique des courbes de charge Enedis, quand ni le relevé ni la mesure n'en donnent un lisible
@@ -94,10 +102,18 @@ export function readingEnergyWh(reading: MeasureReading, unit?: string, defaultI
   return unit === 'W' ? reading.value * readingHours(reading, defaultInterval) : reading.value
 }
 
-// Minute de la journée d'une heure « HH:MM » ou d'une date « YYYY-MM-DD HH:MM:SS » (la date n'a pas de « : »)
-const minuteOfDay = (value: string): number | undefined => {
-  const match = value?.match(/(\d{2}):(\d{2})/)
+// Minute de la journée d'une heure « HH:MM » du jour affiché
+const minuteOfDay = (time: string): number | undefined => {
+  const match = time.match(/^(\d{2}):(\d{2})/)
   return match ? parseInt(match[1], 10) * 60 + parseInt(match[2], 10) : undefined
+}
+
+// Minute de la journée d'un relevé, lue comme les hooks construisent l'heure du jour affiché (Date locale) :
+// une date suffixée d'un fuseau (+01:00, compte démo) tombe ainsi dans le même créneau des deux côtés
+const readingMinuteOfDay = (date: string): number | undefined => {
+  if (!/\d{2}:\d{2}/.test(date ?? '')) return undefined
+  const parsed = new Date(date.replace(' ', 'T'))
+  return isNaN(parsed.getTime()) ? undefined : parsed.getHours() * 60 + parsed.getMinutes()
 }
 
 /**
@@ -116,7 +132,7 @@ export function resamplePowerKw(
   defaultInterval?: string,
 ): (number | null)[] {
   const intervals = readings.flatMap((reading) => {
-    const start = minuteOfDay(reading.date)
+    const start = readingMinuteOfDay(reading.date)
     if (start === undefined) return []
     const hours = readingHours(reading, defaultInterval)
     return [{ start, end: start + hours * 60, kw: readingEnergyWh(reading, unit, defaultInterval) / hours / 1000 }]

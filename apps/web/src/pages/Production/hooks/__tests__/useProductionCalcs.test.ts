@@ -4,7 +4,7 @@ import { useProductionCalcs } from '../useProductionCalcs'
 import { DAY_1, DAY_2, mixedCurve } from '@/test/loadCurve'
 
 // MED-24 : courbe de production dont le pas change (PT30M puis PT10M)
-describe('useProductionCalcs — courbe détaillée à pas mixte', () => {
+describe('useProductionCalcs : courbe détaillée à pas mixte', () => {
   const render = () => renderHook(() => useProductionCalcs({ productionData: null, detailData: mixedCurve('PROD') }))
 
   it('24 kWh par jour, chaque relevé comptant pour son pas', () => {

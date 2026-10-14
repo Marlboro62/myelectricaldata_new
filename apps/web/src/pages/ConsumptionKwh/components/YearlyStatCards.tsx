@@ -34,7 +34,8 @@ const cardColors = [
 export function YearlyStatCards({ chartData, consumptionData, title }: YearlyStatCardsProps) {
   const handleExportYear = (yearData: any) => {
     const intervalLength = getIntervalLength(consumptionData) || 'P1D'
-    const unit = getUnit(consumptionData) || 'W'
+    // Mesure quotidienne : énergie en Wh, jamais multipliée par le pas (MED-24)
+    const unit = getUnit(consumptionData) || 'Wh'
 
     const startDateFormatted = yearData.startDate.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -54,6 +55,7 @@ export function YearlyStatCards({ chartData, consumptionData, title }: YearlySta
     }).map((reading) => ({
       date: reading.date?.split('T')[0] || reading.date,
       value_raw: reading.value || 0,
+      interval_length: reading.interval_length ?? intervalLength,
       value_wh: readingEnergyWh(reading, unit, intervalLength)
     }))
 

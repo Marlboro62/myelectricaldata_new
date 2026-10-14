@@ -4,7 +4,7 @@ import { useBalanceCalcs } from '../useBalanceCalcs'
 import { DAY_1, DAY_2, dailyMeasure, dayReadings, loadCurve, mixedCurve } from '@/test/loadCurve'
 
 // MED-24 : l'autoconsommation fine compare conso et production relevé par relevé, en W
-describe('useBalanceCalcs — courbe de charge à pas mixte', () => {
+describe('useBalanceCalcs : courbe de charge à pas mixte', () => {
   const consumptionDaily = dailyMeasure('CONS', 24000)
   const productionDaily = dailyMeasure('PROD', 24000)
 

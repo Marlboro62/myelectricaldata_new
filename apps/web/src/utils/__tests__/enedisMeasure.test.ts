@@ -3,6 +3,7 @@ import {
   getReadings,
   getUnit,
   getIntervalLength,
+  getIntervalLengths,
   hasReadings,
   buildMeasure,
   getContractSummary,
@@ -11,7 +12,7 @@ import {
   readingEnergyWh,
   resamplePowerKw,
 } from '../enedisMeasure'
-import { dayReadings, mixedCurve } from '@/test/loadCurve'
+import { dayReadings, loadCurve, mixedCurve } from '@/test/loadCurve'
 
 const measure2026 = {
   idPrm: '99999999999991',
@@ -139,7 +140,7 @@ describe('enedisMeasure — revue MED-14', () => {
 })
 
 // MED-24 : chaque relevé compte pour son propre pas (courbe à pas mixte, compteur reconfiguré)
-describe('enedisMeasure — pas et énergie par relevé', () => {
+describe('enedisMeasure : pas et énergie par relevé', () => {
   it('convertit un pas en heures', () => {
     expect(intervalToHours('PT10M')).toBeCloseTo(1 / 6)
     expect(intervalToHours('PT15M')).toBe(0.25)
@@ -153,6 +154,19 @@ describe('enedisMeasure — pas et énergie par relevé', () => {
     expect(intervalToHours(undefined)).toBeUndefined()
     expect(intervalToHours('')).toBeUndefined()
     expect(intervalToHours('sont à ')).toBeUndefined()
+  })
+
+  it('formats hors ISO 8601 des courbes : undefined (P30M = 30 mois, PT1D invalide, PT0M nul)', () => {
+    expect(intervalToHours('P30M')).toBeUndefined()
+    expect(intervalToHours('PT1D')).toBeUndefined()
+    expect(intervalToHours('PT0M')).toBeUndefined()
+    expect(readingEnergyWh({ date: 'x', value: 1000, interval_length: 'PT0M' }, 'W', 'PT30M')).toBe(500)
+  })
+
+  it('pas distincts d\'une courbe : un seul pour une courbe homogène, deux pour une courbe mixte', () => {
+    expect(getIntervalLengths(loadCurve(dayReadings('2026-09-22', 'PT15M', 1000)))).toEqual(['PT15M'])
+    expect(getIntervalLengths(mixedCurve())).toEqual(['PT30M', 'PT10M'])
+    expect(getIntervalLengths(null)).toEqual([])
   })
 
   it('puissance (W) × pas du relevé, prioritaire sur le pas par défaut', () => {
@@ -179,7 +193,7 @@ describe('enedisMeasure — pas et énergie par relevé', () => {
   })
 })
 
-describe('enedisMeasure — courbe de comparaison sur les créneaux du jour affiché', () => {
+describe('enedisMeasure : courbe de comparaison sur les créneaux du jour affiché', () => {
   const times = (pas: 'PT10M' | 'PT30M') => dayReadings('2026-09-29', pas, 0).map((r) => r.date.slice(11, 16))
 
   it('même pas : puissance moyenne en kW, créneau par créneau', () => {
@@ -208,6 +222,14 @@ describe('enedisMeasure — courbe de comparaison sur les créneaux du jour affi
     const power = resamplePowerKw(dayReadings('2026-09-22', 'PT30M', 1000).slice(0, 2), times('PT30M'), 'W')
     expect(power[0]).toBeCloseTo(1)
     expect(power[2]).toBeNull()
+  })
+
+  it('date suffixée d\'un fuseau (démo) : même créneau que l\'heure locale calculée par les hooks', () => {
+    const date = '2026-07-22T10:00:00+01:00'
+    const local = new Date(date)
+    const slot = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`
+    const power = resamplePowerKw([{ date, value: 1000, interval_length: 'PT30M' }], [slot], 'W')
+    expect(power[0]).toBeCloseTo(1)
   })
 
   it('énergie (Wh) ramenée à une puissance moyenne', () => {

@@ -164,10 +164,10 @@ export function useBalanceCalcs(
       const detailConsumption = new Map<string, number>()
       const detailProduction = new Map<string, number>()
 
-      const detailConsoInterval = getIntervalLength(consumptionDetailData)
-      const detailConsoUnit = getUnit(consumptionDetailData)
-      const detailProdInterval = getIntervalLength(productionDetailData)
-      const detailProdUnit = getUnit(productionDetailData)
+      const detailConsoInterval = getIntervalLength(consumptionDetailData) || 'PT30M'
+      const detailConsoUnit = getUnit(consumptionDetailData) || 'W'
+      const detailProdInterval = getIntervalLength(productionDetailData) || 'PT30M'
+      const detailProdUnit = getUnit(productionDetailData) || 'W'
 
       // Chaque relevé compte pour son propre pas : une courbe peut passer de PT30M à PT10M (MED-24)
       getReadings(consumptionDetailData).forEach((reading: MeasureReading) => {
@@ -182,7 +182,7 @@ export function useBalanceCalcs(
         detailProduction.set(timestamp, value)
       })
 
-      // Calculate self-consumption at 30min resolution
+      // Autoconsommation relevé par relevé : jointure par horodatage exact, même pas sur CONS et PROD (un seul compteur)
       let detailedSelfConsumed = 0
       let detailedTotalProduction = 0
 

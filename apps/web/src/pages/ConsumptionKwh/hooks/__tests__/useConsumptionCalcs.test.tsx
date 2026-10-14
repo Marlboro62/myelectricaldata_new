@@ -28,7 +28,7 @@ function renderCalcs(props: Partial<Parameters<typeof useConsumptionCalcs>[0]>, 
 }
 
 // MED-24 : courbe de consommation dont le pas change (PT30M puis PT10M)
-describe('useConsumptionCalcs — courbe de charge à pas mixte', () => {
+describe('useConsumptionCalcs : courbe de charge à pas mixte', () => {
   it('courbe détaillée : 24 kWh par jour, chaque relevé comptant pour son pas', () => {
     const { result } = renderCalcs({ detailData: mixedCurve() })
     const byDate = Object.fromEntries(result.current.detailByDayData.map((d) => [d.date, d]))

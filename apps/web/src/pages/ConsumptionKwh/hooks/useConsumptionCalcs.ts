@@ -36,7 +36,8 @@ export function useConsumptionCalcs({
     }
 
     const readings = getReadings(consumptionData)
-    const unit = getUnit(consumptionData) || 'W'
+    // Mesure quotidienne : énergie en Wh, jamais multipliée par le pas (MED-24)
+    const unit = getUnit(consumptionData) || 'Wh'
     const intervalLength = getIntervalLength(consumptionData) || 'P1D'
 
     // Énergie (Wh) d'un relevé, au pas qui lui est propre (MED-24)
