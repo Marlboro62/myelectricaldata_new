@@ -101,6 +101,23 @@ async def test_export_mqtt_planifie_compte_zen_flex(monkeypatch, caplog):
     assert "Export MQTT completed: 4 records" in caplog.text
 
 
+async def test_export_mqtt_planifie_broker_injoignable(monkeypatch):
+    """L'exception remonte à la boucle : statut failed, erreur gardée, prochaine échéance posée."""
+    config = mqtt_config()
+    patch_session(monkeypatch, [config])
+    run = patch_run_full_export(monkeypatch)
+    run.side_effect = ConnectionError("broker core-mosquitto unreachable")
+    before = datetime.now(UTC)
+
+    await run_scheduled_exports()
+
+    run.assert_awaited_once()
+    assert config.last_export_status == "failed"
+    assert config.last_export_error == "broker core-mosquitto unreachable"
+    assert config.export_count == 0
+    assert config.next_export_at >= before + timedelta(minutes=60)
+
+
 async def test_export_mqtt_pas_encore_du_n_est_pas_lance(monkeypatch):
     config = mqtt_config(next_export_at=datetime.now(UTC) + timedelta(minutes=30))
     patch_session(monkeypatch, [config])
