@@ -44,7 +44,7 @@ class RateLimiterService:
         # Set with TTL until end of day
         now = datetime.now(UTC)
         end_of_day = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
-        ttl_seconds = int((end_of_day - now).total_seconds())
+        ttl_seconds = max(int((end_of_day - now).total_seconds()), 1)  # 0 à minuit pile : Redis refuse un TTL nul
 
         # Check if limit exceeded (admins won't reach this)
         if current_count >= limit:
@@ -77,7 +77,7 @@ class RateLimiterService:
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         cache_type = "cached" if cache_used else "no_cache"
         marker = f"rate_limit_warned:{user_id}:{cache_type}:{today}"
-        if await cache_service.redis_client.set(marker, "1", ex=max(ttl_seconds, 1), nx=True):
+        if await cache_service.redis_client.set(marker, "1", ex=ttl_seconds, nx=True):
             logger.warning(
                 f"[RATE LIMIT] Quota journalier {cache_type} atteint pour l'utilisateur {user_id} "
                 f"({count}/{limit}) sur {endpoint or '?'} : appels refusés jusqu'à minuit UTC"

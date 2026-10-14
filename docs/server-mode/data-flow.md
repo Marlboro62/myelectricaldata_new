@@ -174,6 +174,8 @@ USE_CACHE: true by default on every Enedis route (MED-43). A caller that sends n
    with-cache quota (1000/day) ; use_cache=false fetches fresh data from Enedis and
    counts against the no-cache quota (50/day). The first refused call of the day logs
    one WARNING "[RATE LIMIT] Quota journalier ... atteint" per user and quota type.
+   Containers >= 2.2.0 send use_cache on measure routes only : their contract and
+   address calls are now served from the gateway cache (up to 24 hours old).
 
 GRANULAR DAILY CACHING
 1. User requests: GET /consumption/daily/12345678901234?start=2024-01-01&end=2025-01-01&use_cache=true
@@ -214,9 +216,18 @@ PRODUCTION (/production/daily, /production/detail), same per-day logic as /power
    range is remembered 24 hours ({prefix}:{pdl}:error:{start}:{end}) so that a client
    resyncing the same windows does not call Enedis each time
    an HTTP 400 refusal of a range (load curve without history, history limit) is
-   remembered the same way, for the exact range only ; 404 (J-1 not yet published),
-   429 and server errors are never remembered
+   remembered the same way, for the exact range only, unless the range ends on J-1 or
+   J-2 (v5 refuses an end date that is not before the current date, which changes at
+   midnight) ; 404 (J-1 not yet published), 429 and server errors are never remembered
    (/power, /production/daily, /production/detail)
+
+CONSUMPTION DETAIL (/consumption/detail), per-day cache shared with /consumption/detail/batch:
+   cache_key = f"consumption:detail:daily:{pdl}:{date}"
+           = {readings, expected_count, interval_length, count}
+   expected_count follows the meter step (PT10M 144, PT15M 96, PT30M 48), same 90 %
+   rule as production detail ; a recent incomplete day is refetched whole (never merged
+   with its cached part, no duplicates) and served as cached if Enedis fails
+   J-1 and J-2 cached 3 hours, older days 24 hours
 
 CACHE TTL: 86400 seconds (24 hours)
 ENCRYPTION: user.client_secret

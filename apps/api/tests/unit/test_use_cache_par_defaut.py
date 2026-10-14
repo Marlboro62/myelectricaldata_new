@@ -2,7 +2,8 @@
 
 Un conteneur local <= 2.1.x n'envoie pas `use_cache` : avec un défaut à False, il ne profitait
 d'aucun cache et butait sur la limite journalière sans cache (50 appels), refusée sans aucun log.
-Le front et les conteneurs >= 2.2.0 envoient le paramètre explicitement : rien ne change pour eux.
+Le front et les conteneurs >= 2.2.0 envoient le paramètre explicitement sur les routes de mesures ; ces
+conteneurs appellent contrat et adresse sans lui : ces deux routes passent au cache passerelle (24 h).
 """
 
 import importlib

@@ -250,14 +250,18 @@ def enedis_business_error(data: Any) -> str | None:
     return None
 
 
-def enedis_rejected_range(error: BaseException) -> str | None:
+def enedis_rejected_range(error: BaseException, api_end: str, today: datetime) -> str | None:
     """Refus HTTP 400 d'Enedis pour la plage demandée (courbe de production sans historique, limite
     d'historique : MED-43), levé tel quel ou en cause du ValueError « code: description » de l'adaptateur.
 
     Une plage passée refusée en 400 ne fait que vieillir : la redemander ne peut pas réussir avant
-    l'expiration du cache. Un 404 (J-1 pas encore publié), un 429 ou une erreur serveur peuvent passer
-    au prochain appel : jamais mémorisés.
+    l'expiration du cache. Une plage qui finit sur J-1 ou J-2 (`api_end` exclue) peut être refusée pour
+    une raison qui tombe au changement de jour (v5 : « end date must be earlier than the current date ») :
+    jamais mémorisée, comme un 404 (J-1 pas encore publié), un 429 ou une erreur serveur.
     """
+    last_day = (datetime.strptime(api_end, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    if is_recent_day(last_day, today):
+        return None
     current: BaseException | None = error
     while current is not None:
         if isinstance(current, httpx.HTTPStatusError) and current.response.status_code == 400:
@@ -315,7 +319,7 @@ async def cached_daily_points(
         except Exception as e:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] {key_prefix} {api_start} to {api_end}: {e}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {e}")
-            if rejected := enedis_rejected_range(e):
+            if rejected := enedis_rejected_range(e, api_end, today):
                 await cache_service.set(error_key, {"error": rejected}, encryption_key)
             continue
         if error := enedis_business_error(data):
@@ -913,39 +917,26 @@ async def get_consumption_detail(
     route = request.scope.get("route")
     endpoint_path = route.path if route else request.url.path
 
-    # NEW: Check cache for each timestamp (ultra-granular cache check)
-    cached_readings = []
+    # Cache jour par jour partagé avec /consumption/detail/batch : consumption:detail:daily:{pdl}:{jour}
+    # = {readings, expected_count, interval_length, count}. Le nombre de points attendus suit le pas réel du
+    # compteur (PT10M : 144, PT15M : 96) : l'ancien cache par horodatage ne cherchait que 48 demi-heures et
+    # tronquait ces courbes, puis doublait un jour partiel complété chez Enedis (MED-43)
+    today = paris_today()
+    cached_readings: list[dict[str, Any]] = []
     missing_dates = []
+    partial_days: dict[str, list[dict[str, Any]]] = {}  # jours récents incomplets, servis si Enedis échoue
 
     if use_cache:
-        # For each day, check all possible timestamps (48 readings per day at 30-min intervals)
         for date_str in date_list:
-            day_complete = True
-            day_readings = []
-
-            # Generate all 48 timestamps for this day (00:00, 00:30, 01:00, ..., 23:30)
-            for hour in range(24):
-                for minute in [0, 30]:
-                    timestamp = f"{date_str}T{hour:02d}:{minute:02d}"
-                    cache_key = f"consumption:detail:{usage_point_id}:{timestamp}"
-                    cached_reading = await cache_service.get(cache_key, encryption_key)
-
-                    if cached_reading:
-                        day_readings.append(as_point(cached_reading))
-                    else:
-                        day_complete = False
-
-            if day_complete and len(day_readings) > 0:
-                cached_readings.extend(day_readings)
-                log_if_debug(effective_user, "debug", f"[CACHE HIT] {date_str} (all {len(day_readings)} readings)", pdl=usage_point_id)
-            else:
-                # Add partial readings we found
-                if day_readings:
-                    cached_readings.extend(day_readings)
-                    log_if_debug(effective_user, "debug", f"[CACHE PARTIAL] {date_str} ({len(day_readings)}/48 readings)", pdl=usage_point_id)
-                else:
-                    log_if_debug(effective_user, "debug", f"[CACHE MISS] {date_str}", pdl=usage_point_id)
-                missing_dates.append(date_str)
+            cached_day = await cache_service.get(f"consumption:detail:daily:{usage_point_id}:{date_str}", encryption_key)
+            if isinstance(cached_day, dict) and cached_day.get("readings"):
+                readings = [as_point(r) for r in cached_day["readings"]]
+                if curve_day_complete(len(readings), cached_day.get("expected_count", 48), date_str, today):
+                    cached_readings.extend(readings)
+                    continue
+                partial_days[date_str] = readings
+            missing_dates.append(date_str)
+        log_if_debug(effective_user, "debug", f"[CACHE] {len(date_list) - len(missing_dates)}/{len(date_list)} days served from cache", pdl=usage_point_id)
     else:
         missing_dates = date_list
 
@@ -1008,28 +999,29 @@ async def get_consumption_detail(
                 # Extract readings (points 2026)
                 readings = extract_points(data)
 
-                # NEW: Cache each reading individually by timestamp (ultra-granular cache)
-                if use_cache and readings:
+                if use_cache:
+                    readings_by_date: dict[str, list[dict[str, Any]]] = {}
                     for reading in readings:
-                        # Get full timestamp: "2025-10-08T20:00:00" or "2025-10-08 20:00:00"
-                        timestamp = reading.get("d", "")
-                        if timestamp:
-                            # Normalize timestamp format (replace space with T)
-                            timestamp = timestamp.replace(" ", "T")
-                            # Remove seconds if present for consistent key format
-                            if len(timestamp) > 16:
-                                timestamp = timestamp[:16]  # Keep only YYYY-MM-DDTHH:MM
-
-                            cache_key = f"consumption:detail:{usage_point_id}:{timestamp}"
-                            await cache_service.set(cache_key, reading, encryption_key)
-
-                    log_with_pdl("info", usage_point_id, f"[CACHE SET] {range_start} to {range_end} ({len(readings)} individual readings cached)")
+                        readings_by_date.setdefault(reading.get("d", "")[:10], []).append(reading)
+                    for date_str, day_readings in readings_by_date.items():
+                        interval_length = day_readings[0].get("p") or "PT30M"
+                        cache_data = {
+                            "readings": day_readings,
+                            "expected_count": EXPECTED_READINGS.get(interval_length, 48),
+                            "interval_length": interval_length,
+                            "count": len(day_readings),
+                        }
+                        ttl = recent_cache_ttl(date_str, today, cache_service.ttl)
+                        await cache_service.set(f"consumption:detail:daily:{usage_point_id}:{date_str}", cache_data, encryption_key, ttl=ttl)
+                    log_with_pdl("info", usage_point_id, f"[CACHE SET] {range_start} to {range_end} ({len(readings)} readings in {len(readings_by_date)} days)")
 
                 all_readings.extend(readings)
 
             except Exception as e:
                 log_with_pdl("error", usage_point_id, f"[ERROR] Failed to fetch {range_start}-{range_end}: {e}")
-                # Continue with other ranges even if one fails
+                # Continue with other ranges even if one fails, serving what the cache had for them
+                for date_str in days_between(range_start, range_end):
+                    all_readings.extend(partial_days.get(date_str, []))
 
     # Combine cached readings with newly fetched readings
     all_readings.extend(cached_readings)
@@ -1743,7 +1735,7 @@ async def get_production_detail(
                     await cache_service.set(error_key, {"error": error}, encryption_key)
             except Exception as e:
                 error = str(e)
-                if rejected := enedis_rejected_range(e):
+                if rejected := enedis_rejected_range(e, api_end, today):
                     await cache_service.set(error_key, {"error": rejected}, encryption_key)
         if error:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] Production detail {api_start} to {api_end}: {error}")

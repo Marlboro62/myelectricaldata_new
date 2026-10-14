@@ -33,7 +33,7 @@ Les API Enedis sont soumises à un quota strict de 5 appels par seconde. Sans m�
 
 ### Activation par défaut (`use_cache`)
 
-Le paramètre `use_cache` vaut `true` par défaut sur toutes les routes Enedis de la passerelle (MED-43) : un appelant qui ne l'envoie pas (conteneur local <= 2.1.x, script tiers) est servi par le cache et compte sur le quota avec cache. Pour forcer des données fraîches chez Enedis, envoyer `use_cache=false` explicitement : l'appel compte alors sur le quota sans cache. Le front et les conteneurs >= 2.2.0 envoient le paramètre eux-mêmes.
+Le paramètre `use_cache` vaut `true` par défaut sur toutes les routes Enedis de la passerelle (MED-43) : un appelant qui ne l'envoie pas (conteneur local <= 2.1.x, script tiers) est servi par le cache et compte sur le quota avec cache. Pour forcer des données fraîches chez Enedis, envoyer `use_cache=false` explicitement : l'appel compte alors sur le quota sans cache. Le front et les conteneurs >= 2.2.0 envoient le paramètre eux-mêmes sur les routes de mesures. Les conteneurs appellent en revanche contrat et adresse sans `use_cache` : ces deux routes, aux données quasi statiques, sont désormais servies par le cache passerelle (jusqu'à 24 h de retard, même pour un rafraîchissement forcé côté conteneur).
 
 ### Rate Limiting utilisateurs
 

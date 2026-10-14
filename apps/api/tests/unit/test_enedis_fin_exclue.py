@@ -62,7 +62,8 @@ class FakeEnedis:
         self.power_unit = "VA"
         self.production_unit = "Wh"
         self.holes: set[str] = set()  # jours sans mesure (compteur coupé)
-        self.partial: set[str] = set()  # jours dont la courbe de production n'a que 30 points sur 48
+        self.partial: set[str] = set()  # jours dont la courbe (consommation, production) n'a que 30 points sur 48
+        self.detail_step = 30  # pas de la courbe de consommation en minutes (compteur PT10M, PT15M, PT30M)
         self.activation: str | None = None  # mise en service : avant, ADAM-ERR0123 rendu en dict (sans exception)
         self.failing = False  # Enedis indisponible : chaque appel lève une exception
         # plage qui commence avant cette date refusée en HTTP (400 : pas d'historique, MED-43)
@@ -87,10 +88,10 @@ class FakeEnedis:
 
     async def get_consumption_detail(self, pdl: str, start: str, end: str, token: str) -> dict[str, Any]:
         points = [
-            {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"}
+            {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": f"PT{self.detail_step}M"}
             for d in self._days("detail", start, end)
-            for h in range(24)
-            for m in (0, 30)
+            for h in range(15 if d in self.partial else 24)
+            for m in range(0, 60, self.detail_step)
         ]
         return build_measure(pdl, start, end, points, grandeur_metier="CONS", grandeur_physique="PA", unite="W")
 
@@ -280,14 +281,58 @@ async def test_detail_end_today_sert_j_moins_1(enedis, cache):
 
 async def test_detail_cache_complet_aucun_appel_ni_jour_fantome(enedis, cache):
     for d in days(j(4), j(1)):
-        for h in range(24):
-            for m in (0, 30):
-                cache.store[f"consumption:detail:{PRM}:{d}T{h:02d}:{m:02d}"] = {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"}
+        readings = [{"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"} for h in range(24) for m in (0, 30)]
+        cache.store[f"consumption:detail:daily:{PRM}:{d}"] = {"readings": readings, "expected_count": 48}
 
     data = await call(router.get_consumption_detail, j(4), j(1), use_cache=True)
 
     assert enedis.calls == []
     assert served_days(data) == [j(4), j(3), j(2)]
+
+
+# Cache passerelle par défaut (MED-43) : les conteneurs locaux qui n'envoient pas use_cache passent par
+# le cache de /consumption/detail. Il suit le pas réel du compteur et ne double pas un jour complété.
+@pytest.mark.parametrize("step, per_day", [(10, 144), (15, 96), (30, 48)])
+async def test_detail_cache_suit_le_pas_du_compteur(enedis, cache, step, per_day):
+    enedis.detail_step = step
+    await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    data = await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    assert enedis.calls == [("detail", j(6), j(3))]
+    assert len(points_of(data)) == 3 * per_day
+
+
+async def test_detail_jour_recent_partiel_complete_sans_doublon(enedis, cache):
+    enedis.partial = {j(1)}
+    first = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+    assert len(points_of(first)) == 2 * 48 + 30
+
+    enedis.partial = set()
+    data = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    timestamps = [p["d"] for p in points_of(data)]
+    assert enedis.calls == [("detail", j(3), j(0)), ("detail", j(1), j(0))]
+    assert len(timestamps) == len(set(timestamps)) == 3 * 48
+
+
+async def test_detail_jour_recent_partiel_servi_si_enedis_echoue(enedis, cache):
+    enedis.partial = {j(1)}
+    await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    enedis.failing = True
+    data = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    assert len(points_of(data)) == 2 * 48 + 30
+
+
+async def test_detail_partage_le_cache_jour_du_batch(enedis, cache):
+    await call(router.get_consumption_detail_batch, j(6), j(3), use_cache=True)
+
+    data = await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    assert len(enedis.calls) == 1
+    assert len(points_of(data)) == 3 * 48
 
 
 async def test_batch_end_hier_s_arrete_a_j_moins_2(enedis, cache):
@@ -604,6 +649,16 @@ async def test_refus_non_400_jamais_memorise(enedis, cache, handler, kind, statu
     await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
 
     assert enedis.calls == [(kind, j(25), j(15))] * 2
+
+
+@RANGE_CACHE
+async def test_refus_400_jamais_memorise_si_la_plage_finit_sur_un_jour_recent(enedis, cache, handler, kind):
+    # v5 : « end date must be earlier than the current date » tombe au changement de jour
+    enedis.rejected_before = j(0)
+    await raw_call(getattr(router, handler), j(5), j(0), use_cache=True)
+    await raw_call(getattr(router, handler), j(5), j(0), use_cache=True)
+
+    assert enedis.calls == [(kind, j(5), j(0))] * 2
 
 
 @RANGE_CACHE
