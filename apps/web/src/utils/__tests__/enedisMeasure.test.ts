@@ -9,7 +9,7 @@ import {
   getAddressSummary,
   intervalToHours,
   readingEnergyWh,
-  powerKwByTime,
+  resamplePowerKw,
 } from '../enedisMeasure'
 import { dayReadings, mixedCurve } from '@/test/loadCurve'
 
@@ -179,23 +179,39 @@ describe('enedisMeasure — pas et énergie par relevé', () => {
   })
 })
 
-describe('enedisMeasure — puissance par heure (courbes de comparaison)', () => {
-  it('puissance moyenne en kW, quel que soit le pas', () => {
-    const at30 = powerKwByTime(dayReadings('2026-09-22', 'PT30M', 1000), 'W')
-    const at10 = powerKwByTime(dayReadings('2026-09-22', 'PT10M', 1000), 'W')
-    expect(at30.get('00:30')).toBeCloseTo(1)
-    expect(at10.get('00:10')).toBeCloseTo(1)
-    expect(at30.size).toBe(48)
-    expect(at10.size).toBe(144)
+describe('enedisMeasure — courbe de comparaison sur les créneaux du jour affiché', () => {
+  const times = (pas: 'PT10M' | 'PT30M') => dayReadings('2026-09-29', pas, 0).map((r) => r.date.slice(11, 16))
+
+  it('même pas : puissance moyenne en kW, créneau par créneau', () => {
+    const power = resamplePowerKw(dayReadings('2026-09-22', 'PT30M', 1000), times('PT30M'), 'W')
+    expect(power).toHaveLength(48)
+    expect(power.every((kw) => kw !== null && Math.abs(kw - 1) < 1e-9)).toBe(true)
   })
 
-  it('jointure par heure : un pas plus grossier laisse les autres heures vides', () => {
-    const at30 = powerKwByTime(dayReadings('2026-09-22', 'PT30M', 1000), 'W')
-    expect(at30.get('00:10')).toBeUndefined()
+  it('comparaison plus fine (PT10M) sur un jour en PT30M : un pic de 10 min reste dans son créneau', () => {
+    const readings = dayReadings('2026-09-22', 'PT10M', 0).map((r) =>
+      r.date.endsWith('00:10:00') ? { ...r, value: 6000 } : r,
+    )
+    const power = resamplePowerKw(readings, times('PT30M'), 'W')
+    // 6 kW pendant 10 min sur un créneau de 30 min : 2 kW de moyenne, énergie conservée
+    expect(power[0]).toBeCloseTo(2)
+    expect(power[1]).toBeCloseTo(0)
+  })
+
+  it('comparaison plus grossière (PT30M) sur un jour en PT10M : chaque créneau reçoit sa valeur', () => {
+    const power = resamplePowerKw(dayReadings('2026-09-22', 'PT30M', 1000), times('PT10M'), 'W')
+    expect(power).toHaveLength(144)
+    expect(power.every((kw) => kw !== null && Math.abs(kw - 1) < 1e-9)).toBe(true)
+  })
+
+  it('créneau non couvert par la comparaison : null', () => {
+    const power = resamplePowerKw(dayReadings('2026-09-22', 'PT30M', 1000).slice(0, 2), times('PT30M'), 'W')
+    expect(power[0]).toBeCloseTo(1)
+    expect(power[2]).toBeNull()
   })
 
   it('énergie (Wh) ramenée à une puissance moyenne', () => {
-    const map = powerKwByTime([{ date: '2026-09-22T10:00:00', value: 250, interval_length: 'PT15M' }], 'Wh')
-    expect(map.get('10:00')).toBeCloseTo(1)
+    const power = resamplePowerKw([{ date: '2026-09-22T10:00:00', value: 250, interval_length: 'PT15M' }], ['10:00', '10:15'], 'Wh')
+    expect(power[0]).toBeCloseTo(1)
   })
 })

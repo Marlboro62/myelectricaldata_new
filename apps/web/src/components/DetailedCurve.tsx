@@ -5,7 +5,7 @@ import { toast } from '@/stores/notificationStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { logger } from '@/utils/logger'
 import { useResponsiveDayCount } from '@/hooks/useResponsiveDayCount'
-import { getIntervalLength, getReadings, getUnit, hasReadings, powerKwByTime } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, resamplePowerKw } from '@/utils/enedisMeasure'
 
 /**
  * Composant de bouton moderne réutilisable
@@ -350,12 +350,18 @@ export function DetailedCurve({
       }
 
       if (weekAgoReadings && weekAgoMeterData) {
-        // Puissance moyenne (kW) comme la courbe principale, jointe par heure : le pas peut différer d'un jour à l'autre (MED-24)
-        const powerByTime = powerKwByTime(weekAgoReadings, getUnit(weekAgoMeterData) || 'W', getIntervalLength(weekAgoMeterData) || 'PT30M')
+        // Puissance moyenne (kW) comme la courbe principale, ramenée sur les créneaux du jour affiché :
+        // le pas peut différer d'un jour à l'autre (MED-24)
+        const comparison = resamplePowerKw(
+          weekAgoReadings,
+          mergedData.map((point) => point.time),
+          getUnit(weekAgoMeterData) || 'W',
+          getIntervalLength(weekAgoMeterData) || 'PT30M',
+        )
 
-        mergedData = mergedData.map((current) => ({
+        mergedData = mergedData.map((current, idx) => ({
           ...current,
-          powerWeekAgo: powerByTime.get(current.time) ?? null
+          powerWeekAgo: comparison[idx]
         }))
       }
     }
@@ -399,12 +405,18 @@ export function DetailedCurve({
       }
 
       if (yearAgoReadings && yearAgoMeterData) {
-        // Puissance moyenne (kW) comme la courbe principale, jointe par heure : le pas peut différer d'un jour à l'autre (MED-24)
-        const powerByTime = powerKwByTime(yearAgoReadings, getUnit(yearAgoMeterData) || 'W', getIntervalLength(yearAgoMeterData) || 'PT30M')
+        // Puissance moyenne (kW) comme la courbe principale, ramenée sur les créneaux du jour affiché :
+        // le pas peut différer d'un jour à l'autre (MED-24)
+        const comparison = resamplePowerKw(
+          yearAgoReadings,
+          mergedData.map((point) => point.time),
+          getUnit(yearAgoMeterData) || 'W',
+          getIntervalLength(yearAgoMeterData) || 'PT30M',
+        )
 
-        mergedData = mergedData.map((current) => ({
+        mergedData = mergedData.map((current, idx) => ({
           ...current,
-          powerYearAgo: powerByTime.get(current.time) ?? null
+          powerYearAgo: comparison[idx]
         }))
       }
     }

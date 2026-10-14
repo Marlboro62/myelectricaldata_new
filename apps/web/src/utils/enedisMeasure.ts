@@ -94,19 +94,50 @@ export function readingEnergyWh(reading: MeasureReading, unit?: string, defaultI
   return unit === 'W' ? reading.value * readingHours(reading, defaultInterval) : reading.value
 }
 
+// Minute de la journée d'une heure « HH:MM » ou d'une date « YYYY-MM-DD HH:MM:SS » (la date n'a pas de « : »)
+const minuteOfDay = (value: string): number | undefined => {
+  const match = value?.match(/(\d{2}):(\d{2})/)
+  return match ? parseInt(match[1], 10) * 60 + parseInt(match[2], 10) : undefined
+}
+
 /**
- * Puissance moyenne (kW) de relevés, indexée par heure de début « HH:MM » : la grandeur tracée par
- * les courbes détaillées, et une jointure par heure qui reste juste quand deux jours n'ont pas le même pas
+ * Puissance moyenne (kW) d'une courbe de comparaison, ramenée sur les créneaux du jour affiché.
+ *
+ * `times` : heures de début « HH:MM » triées du jour affiché ; chaque créneau court jusqu'au suivant, le
+ * dernier sur le même pas que l'avant-dernier. La valeur d'un créneau est la moyenne des puissances de la
+ * comparaison qui le recouvrent, pondérée par la durée de recouvrement : juste quand les deux jours n'ont
+ * pas le même pas (un pic de 10 min reste dans le créneau de 30 min qui le contient), null si rien ne le
+ * couvre (MED-24).
  */
-export function powerKwByTime(readings: MeasureReading[], unit?: string, defaultInterval?: string): Map<string, number> {
-  return new Map(
-    readings
-      .filter((reading) => reading.date?.length >= 16)
-      .map((reading) => [
-        reading.date.slice(11, 16),
-        readingEnergyWh(reading, unit, defaultInterval) / readingHours(reading, defaultInterval) / 1000,
-      ]),
-  )
+export function resamplePowerKw(
+  readings: MeasureReading[],
+  times: string[],
+  unit?: string,
+  defaultInterval?: string,
+): (number | null)[] {
+  const intervals = readings.flatMap((reading) => {
+    const start = minuteOfDay(reading.date)
+    if (start === undefined) return []
+    const hours = readingHours(reading, defaultInterval)
+    return [{ start, end: start + hours * 60, kw: readingEnergyWh(reading, unit, defaultInterval) / hours / 1000 }]
+  })
+  const starts = times.map(minuteOfDay)
+
+  return starts.map((start, i) => {
+    if (start === undefined) return null
+    const previous = starts[i - 1]
+    const end = starts[i + 1] ?? (previous !== undefined ? start + (start - previous) : 24 * 60)
+    let weighted = 0
+    let covered = 0
+    for (const interval of intervals) {
+      const overlap = Math.min(end, interval.end) - Math.max(start, interval.start)
+      if (overlap > 0) {
+        weighted += interval.kw * overlap
+        covered += overlap
+      }
+    }
+    return covered > 0 ? weighted / covered : null
+  })
 }
 
 /** Réponse 2026 reconstruite à partir de lectures (cache React Query, données de démo) */
