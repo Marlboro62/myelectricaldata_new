@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from src.adapters.demo_adapter import DemoAdapter
@@ -37,6 +38,20 @@ def days(start: str, end: str) -> list[str]:
     return out
 
 
+def enedis_http_error(status: int, as_value_error: bool) -> Exception:
+    """Refus HTTP d'Enedis tel que le lève l'adaptateur : ValueError « code: description » chaînée au
+    HTTPStatusError quand le corps porte `error`, HTTPStatusError brut sinon."""
+    request = httpx.Request("GET", "https://gw.ext.prod.api.enedis.fr/mesure_synchrone_auto/v2/courbe_de_charge_production")
+    body = {"error": "Bad Request" if status == 400 else "Error", "error_description": "refus Enedis"}
+    response = httpx.Response(status, request=request, json=body)
+    cause = httpx.HTTPStatusError(f"Client error '{status}'", request=request, response=response)
+    if not as_value_error:
+        return cause
+    error = ValueError(f"{body['error']}: {body['error_description']}")
+    error.__cause__ = cause
+    return error
+
+
 class FakeEnedis:
     """Data Connect 2026 : dateFin exclue, dateDebut < dateFin exigé, données jusqu'à J-1."""
 
@@ -47,14 +62,21 @@ class FakeEnedis:
         self.power_unit = "VA"
         self.production_unit = "Wh"
         self.holes: set[str] = set()  # jours sans mesure (compteur coupé)
-        self.partial: set[str] = set()  # jours dont la courbe de production n'a que 30 points sur 48
+        self.partial: set[str] = set()  # jours dont la courbe (consommation, production) n'a que 30 points sur 48
+        self.detail_step = 30  # pas de la courbe de consommation en minutes (compteur PT10M, PT15M, PT30M)
         self.activation: str | None = None  # mise en service : avant, ADAM-ERR0123 rendu en dict (sans exception)
         self.failing = False  # Enedis indisponible : chaque appel lève une exception
+        # plage qui commence avant cette date refusée en HTTP (400 : pas d'historique, MED-43)
+        self.rejected_before: str | None = None
+        self.rejected_status = 400
+        self.rejected_as_value_error = True
 
     def _days(self, kind: str, start: str, end: str) -> list[str]:
         self.calls.append((kind, start, end))
         if self.failing:
             raise RuntimeError("503 Service Unavailable")
+        if self.rejected_before and start < self.rejected_before:
+            raise enedis_http_error(self.rejected_status, self.rejected_as_value_error)
         if start >= end:
             raise RuntimeError(f"ADAM-ERR0069 dateDebut {start} >= dateFin {end}")
         last = date.fromisoformat(j(self.published_until))
@@ -66,10 +88,10 @@ class FakeEnedis:
 
     async def get_consumption_detail(self, pdl: str, start: str, end: str, token: str) -> dict[str, Any]:
         points = [
-            {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"}
+            {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": f"PT{self.detail_step}M"}
             for d in self._days("detail", start, end)
-            for h in range(24)
-            for m in (0, 30)
+            for h in range(15 if d in self.partial else 24)
+            for m in range(0, 60, self.detail_step)
         ]
         return build_measure(pdl, start, end, points, grandeur_metier="CONS", grandeur_physique="PA", unite="W")
 
@@ -259,14 +281,58 @@ async def test_detail_end_today_sert_j_moins_1(enedis, cache):
 
 async def test_detail_cache_complet_aucun_appel_ni_jour_fantome(enedis, cache):
     for d in days(j(4), j(1)):
-        for h in range(24):
-            for m in (0, 30):
-                cache.store[f"consumption:detail:{PRM}:{d}T{h:02d}:{m:02d}"] = {"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"}
+        readings = [{"v": "300", "d": f"{d} {h:02d}:{m:02d}:00", "p": "PT30M"} for h in range(24) for m in (0, 30)]
+        cache.store[f"consumption:detail:daily:{PRM}:{d}"] = {"readings": readings, "expected_count": 48}
 
     data = await call(router.get_consumption_detail, j(4), j(1), use_cache=True)
 
     assert enedis.calls == []
     assert served_days(data) == [j(4), j(3), j(2)]
+
+
+# Cache passerelle par défaut (MED-43) : les conteneurs locaux qui n'envoient pas use_cache passent par
+# le cache de /consumption/detail. Il suit le pas réel du compteur et ne double pas un jour complété.
+@pytest.mark.parametrize("step, per_day", [(10, 144), (15, 96), (30, 48)])
+async def test_detail_cache_suit_le_pas_du_compteur(enedis, cache, step, per_day):
+    enedis.detail_step = step
+    await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    data = await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    assert enedis.calls == [("detail", j(6), j(3))]
+    assert len(points_of(data)) == 3 * per_day
+
+
+async def test_detail_jour_recent_partiel_complete_sans_doublon(enedis, cache):
+    enedis.partial = {j(1)}
+    first = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+    assert len(points_of(first)) == 2 * 48 + 30
+
+    enedis.partial = set()
+    data = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    timestamps = [p["d"] for p in points_of(data)]
+    assert enedis.calls == [("detail", j(3), j(0)), ("detail", j(1), j(0))]
+    assert len(timestamps) == len(set(timestamps)) == 3 * 48
+
+
+async def test_detail_jour_recent_partiel_servi_si_enedis_echoue(enedis, cache):
+    enedis.partial = {j(1)}
+    await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    enedis.failing = True
+    data = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    assert len(points_of(data)) == 2 * 48 + 30
+
+
+async def test_detail_partage_le_cache_jour_du_batch(enedis, cache):
+    await call(router.get_consumption_detail_batch, j(6), j(3), use_cache=True)
+
+    data = await call(router.get_consumption_detail, j(6), j(3), use_cache=True)
+
+    assert len(enedis.calls) == 1
+    assert len(points_of(data)) == 3 * 48
 
 
 async def test_batch_end_hier_s_arrete_a_j_moins_2(enedis, cache):
@@ -539,6 +605,68 @@ async def test_production_adam_err0123_memorise_pour_la_meme_plage(enedis, cache
     assert enedis.calls == [(kind, j(25), j(15))]
     assert not first.success and not second.success
     assert "ADAM-ERR0123" in second.error.message
+
+
+# Refus HTTP 400 d'une plage (courbe de production sans historique, limite d'historique : MED-43).
+# Un conteneur local resynchronise les mêmes fenêtres toutes les 30 min : la plage EXACTE refusée
+# est mémorisée comme ADAM-ERR0123, une autre plage reste demandée. Un 404 (J-1 pas encore publié,
+# MED-20) et une erreur serveur ne sont jamais mémorisés.
+RANGE_CACHE = pytest.mark.parametrize(
+    "handler, kind",
+    [("get_max_power", "power"), ("get_production_daily", "prod_daily"), ("get_production_detail", "prod_detail")],
+)
+
+
+@RANGE_CACHE
+@pytest.mark.parametrize("as_value_error", [True, False])
+async def test_refus_400_memorise_pour_la_meme_plage(enedis, cache, handler, kind, as_value_error):
+    enedis.rejected_before = j(20)
+    enedis.rejected_as_value_error = as_value_error
+    first = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+    second = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15))]
+    assert not first.success and not second.success
+
+
+@RANGE_CACHE
+async def test_refus_400_une_autre_plage_reste_demandee(enedis, cache, handler, kind):
+    enedis.rejected_before = j(20)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    data = await call(getattr(router, handler), j(19), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15)), (kind, j(19), j(15))]
+    assert served_days(data) == days(j(19), j(15))
+
+
+@RANGE_CACHE
+@pytest.mark.parametrize("status", [404, 429, 503])
+async def test_refus_non_400_jamais_memorise(enedis, cache, handler, kind, status):
+    enedis.rejected_before = j(20)
+    enedis.rejected_status = status
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15))] * 2
+
+
+@RANGE_CACHE
+async def test_refus_400_jamais_memorise_si_la_plage_finit_sur_un_jour_recent(enedis, cache, handler, kind):
+    # v5 : « end date must be earlier than the current date » tombe au changement de jour
+    enedis.rejected_before = j(0)
+    await raw_call(getattr(router, handler), j(5), j(0), use_cache=True)
+    await raw_call(getattr(router, handler), j(5), j(0), use_cache=True)
+
+    assert enedis.calls == [(kind, j(5), j(0))] * 2
+
+
+@RANGE_CACHE
+async def test_refus_400_ne_marque_pas_les_jours_vides(enedis, cache, handler, kind):
+    enedis.rejected_before = j(20)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert router.EMPTY_DAY not in cache.store.values()
 
 
 async def test_production_detail_jour_recent_partiel_servi_si_enedis_echoue(enedis, cache):

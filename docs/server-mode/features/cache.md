@@ -31,6 +31,10 @@ Les API Enedis sont soumises à un quota strict de 5 appels par seconde. Sans m�
 - **`CACHE_TTL_SECONDS`** : Durée de vie du cache (défaut: 86400 = 24h)
 - **`ENEDIS_RATE_LIMIT`** : Limite de requêtes/seconde vers Enedis (défaut: 5)
 
+### Activation par défaut (`use_cache`)
+
+Le paramètre `use_cache` vaut `true` par défaut sur toutes les routes Enedis de la passerelle (MED-43) : un appelant qui ne l'envoie pas (conteneur local <= 2.1.x, script tiers) est servi par le cache et compte sur le quota avec cache. Pour forcer des données fraîches chez Enedis, envoyer `use_cache=false` explicitement : l'appel compte alors sur le quota sans cache. Le front et les conteneurs >= 2.2.0 envoient le paramètre eux-mêmes sur les routes de mesures. Les conteneurs appellent en revanche contrat et adresse sans `use_cache` : ces deux routes, aux données quasi statiques, sont désormais servies par le cache passerelle (jusqu'à 24 h de retard, même pour un rafraîchissement forcé côté conteneur).
+
 ### Rate Limiting utilisateurs
 
 En plus du rate limiting Enedis, chaque utilisateur dispose de quotas journaliers distincts :
@@ -40,8 +44,10 @@ En plus du rate limiting Enedis, chaque utilisateur dispose de quotas journalier
   - Effectue un appel réel vers l'API Enedis
 
 - **`USER_DAILY_LIMIT_WITH_CACHE`** : Quota pour les requêtes avec cache (défaut: 1000/jour)
-  - Consommé lorsque la donnée est servie depuis le cache
-  - Aucun appel vers Enedis
+  - Consommé par chaque appel avec `use_cache=true` (défaut), servi ou non depuis le cache
+  - Seuls les jours absents du cache partent chez Enedis
+
+Le premier refus du jour d'un quota est journalisé une seule fois par utilisateur et par type de quota (`WARNING [RATE LIMIT] Quota journalier ... atteint`, marqueur `rate_limit_warned:{user_id}:{type}:{date}`) ; les refus suivants ne le sont pas.
 
 ### Clés Valkey/Redis
 

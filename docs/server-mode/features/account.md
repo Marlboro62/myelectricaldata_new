@@ -65,8 +65,8 @@ Le Swagger (`/docs`) supporte OAuth2 Client Credentials nativement :
 ### Rate Limiting
 
 Chaque utilisateur dispose de quotas journaliers :
-- **Sans cache** : 50 requêtes/jour vers l'API Enedis (configurable via `USER_DAILY_LIMIT_NO_CACHE`)
-- **Avec cache** : 1000 requêtes/jour servies depuis le cache (configurable via `USER_DAILY_LIMIT_WITH_CACHE`)
+- **Avec cache** (défaut, `use_cache` absent ou `true`) : 1000 requêtes/jour (configurable via `USER_DAILY_LIMIT_WITH_CACHE`)
+- **Sans cache** (`use_cache=false` explicite) : 50 requêtes/jour vers l'API Enedis (configurable via `USER_DAILY_LIMIT_NO_CACHE`)
 
 Les compteurs sont stockés dans Redis avec TTL jusqu'à minuit UTC.
 

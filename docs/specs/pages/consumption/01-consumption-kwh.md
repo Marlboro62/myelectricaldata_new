@@ -302,7 +302,7 @@ Les conteneurs de graphiques utilisent des gradients subtils :
 ### Cache granulaire
 
 - **Daily data** : 1 clé cache par jour (`consumption:daily:{pdl}:{date}`)
-- **Detail data** : 1 clé cache par timestamp (`consumption:detail:{pdl}:{timestamp}`)
+- **Detail data** : 1 clé cache par jour (`consumption:detail:daily:{pdl}:{date}`), partagée par `/consumption/detail` et `/consumption/detail/batch`, nombre de points attendus selon le pas du compteur (PT10M, PT15M, PT30M)
 - **Reading type** : Stocké séparément (`consumption:reading_type:{pdl}`)
 
 ### Calculs par année glissante ✅

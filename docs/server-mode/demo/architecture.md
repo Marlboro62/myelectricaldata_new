@@ -349,8 +349,8 @@ consumption:daily:{usage_point_id}:{date}
 consumption:reading_type:{usage_point_id}
   - Stores meter reading type metadata
 
-consumption:detail:{usage_point_id}:{start}:{end}
-  - Stores detail (load curve) data
+consumption:detail:daily:{usage_point_id}:{date}
+  - Stores one day of detail (load curve) readings
 
 rate_limit:{user_id}:cached:{YYYY-MM-DD}
   - Tracks cached API calls per day

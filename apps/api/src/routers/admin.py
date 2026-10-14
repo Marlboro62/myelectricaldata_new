@@ -156,9 +156,11 @@ async def reset_user_quota(
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     cached_key = f"rate_limit:{user_id}:cached:{today}"
     no_cache_key = f"rate_limit:{user_id}:no_cache:{today}"
+    # Marqueurs du premier refus journalisé (MED-43) : après un reset, le prochain refus est de nouveau journalisé
+    warned_keys = [f"rate_limit_warned:{user_id}:{cache_type}:{today}" for cache_type in ("cached", "no_cache")]
 
     if cache_service.redis_client:
-        await cache_service.redis_client.delete(cached_key, no_cache_key)
+        await cache_service.redis_client.delete(cached_key, no_cache_key, *warned_keys)
 
     return APIResponse(
         success=True,
