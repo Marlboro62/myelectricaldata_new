@@ -7,7 +7,10 @@ import {
   buildMeasure,
   getContractSummary,
   getAddressSummary,
+  intervalToHours,
+  readingEnergyWh,
 } from '../enedisMeasure'
+import { mixedCurve } from '@/test/loadCurve'
 
 const measure2026 = {
   idPrm: '99999999999991',
@@ -131,5 +134,46 @@ describe('enedisMeasure — revue MED-14', () => {
       synthese_contrat: { generation_last_activation_date: '2024-07-31T00:00:00+0200' },
     })
     expect(summary?.lastActivationDate).toBe('2024-07-31')
+  })
+})
+
+// MED-24 : chaque relevé compte pour son propre pas (courbe à pas mixte, compteur reconfiguré)
+describe('enedisMeasure — pas et énergie par relevé', () => {
+  it('convertit un pas en heures', () => {
+    expect(intervalToHours('PT10M')).toBeCloseTo(1 / 6)
+    expect(intervalToHours('PT15M')).toBe(0.25)
+    expect(intervalToHours('PT30M')).toBe(0.5)
+    expect(intervalToHours('PT60M')).toBe(1)
+    expect(intervalToHours('PT1H')).toBe(1)
+    expect(intervalToHours('P1D')).toBe(24)
+  })
+
+  it('pas absent ou illisible : undefined, sans deviner', () => {
+    expect(intervalToHours(undefined)).toBeUndefined()
+    expect(intervalToHours('')).toBeUndefined()
+    expect(intervalToHours('sont à ')).toBeUndefined()
+  })
+
+  it('puissance (W) × pas du relevé, prioritaire sur le pas par défaut', () => {
+    expect(readingEnergyWh({ date: 'x', value: 1000, interval_length: 'PT10M' }, 'W', 'PT30M')).toBeCloseTo(1000 / 6)
+    expect(readingEnergyWh({ date: 'x', value: 1000, interval_length: 'PT15M' }, 'W', 'PT30M')).toBe(250)
+  })
+
+  it('relevé sans pas : pas par défaut, sinon 30 min (pas historique Enedis)', () => {
+    expect(readingEnergyWh({ date: 'x', value: 1000 }, 'W', 'PT15M')).toBe(250)
+    expect(readingEnergyWh({ date: 'x', value: 1000 }, 'W')).toBe(500)
+    expect(readingEnergyWh({ date: 'x', value: 1000 }, 'W', 'illisible')).toBe(500)
+  })
+
+  it('valeur déjà en énergie (Wh) : inchangée, quel que soit le pas', () => {
+    expect(readingEnergyWh({ date: 'x', value: 33495, interval_length: 'P1D' }, 'Wh')).toBe(33495)
+    expect(readingEnergyWh({ date: 'x', value: 120, interval_length: 'PT30M' }, 'WH')).toBe(120)
+  })
+
+  it('courbe mixte 48×PT30M + 144×PT10M à 1000 W : 48 kWh', () => {
+    const readings = getReadings(mixedCurve())
+    const totalWh = readings.reduce((sum, r) => sum + readingEnergyWh(r, 'W', getIntervalLength(mixedCurve())), 0)
+    expect(readings).toHaveLength(192)
+    expect(totalWh / 1000).toBeCloseTo(48)
   })
 })
