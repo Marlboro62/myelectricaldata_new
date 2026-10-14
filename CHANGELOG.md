@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.4.4...2.5.0) (2026-10-14)
+
+### Features
+
+* **api:** MED-43 / use_cache par défaut et cache négatif des refus 400 Enedis ([d0084df](https://github.com/MyElectricalData/myelectricaldata_new/commit/d0084df5c8e4744f6a93b66ed886aaa4324b45f6))
+
+### Bug Fixes
+
+* **api:** MED-43 / corrections de revue du cache par défaut ([51a6547](https://github.com/MyElectricalData/myelectricaldata_new/commit/51a6547f92409dbb767c8b2018216d175616b590))
+
 ## [2.4.4](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.4.3...2.4.4) (2026-10-06)
 
 ### Bug Fixes
