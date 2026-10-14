@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.1...2.5.2) (2026-10-14)
+
+### Bug Fixes
+
+* **export:** mean_type et unit_class dans les métadonnées de recorder/import_statistics (HA 2025.11+) ([7c57021](https://github.com/MyElectricalData/myelectricaldata_new/commit/7c57021cb8265748dd34194942346445c580f6c3))
+* **scheduler:** MED-32 / zen_flex compté dans l'export MQTT planifié ([069a991](https://github.com/MyElectricalData/myelectricaldata_new/commit/069a991dbf5a047d8d3cf92269398a31455a9029))
+
 ## [2.5.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.0...2.5.1) (2026-10-14)
 
 ### Bug Fixes
