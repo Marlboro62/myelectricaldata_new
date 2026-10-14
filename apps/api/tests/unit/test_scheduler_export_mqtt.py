@@ -17,19 +17,19 @@ PRM = "99999999999991"
 
 
 def mqtt_config(**overrides):
-    values = dict(
-        name="MQTT",
-        export_type=ExportType.MQTT,
-        config={"broker": "core-mosquitto"},
-        usage_point_ids=[PRM],
-        is_enabled=True,
-        export_interval_minutes=60,
-        next_export_at=None,
-        last_export_at=None,
-        last_export_status=None,
-        last_export_error=None,
-        export_count=0,
-    )
+    values = {
+        "name": "MQTT",
+        "export_type": ExportType.MQTT,
+        "config": {"broker": "core-mosquitto"},
+        "usage_point_ids": [PRM],
+        "is_enabled": True,
+        "export_interval_minutes": 60,
+        "next_export_at": None,
+        "last_export_at": None,
+        "last_export_status": None,
+        "last_export_error": None,
+        "export_count": 0,
+    }
     values.update(overrides)
     return SimpleNamespace(**values)
 
