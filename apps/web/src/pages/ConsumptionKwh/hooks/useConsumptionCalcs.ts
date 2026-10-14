@@ -2,7 +2,8 @@ import { useMemo, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { parseOffpeakHours, isOffpeakTime } from '@/utils/offpeakHours'
 import { useDatePreferencesStore } from '@/stores/datePreferencesStore'
-import { getIntervalLength, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
+import type { MeasureReading } from '@/types/api'
 import type { ConsumptionAPIResponse, MaxPowerAPIResponse, DetailAPIResponse } from '../types/consumption.types'
 
 interface UseConsumptionCalcsProps {
@@ -38,31 +39,8 @@ export function useConsumptionCalcs({
     const unit = getUnit(consumptionData) || 'W'
     const intervalLength = getIntervalLength(consumptionData) || 'P1D'
 
-    // Parse interval length to determine how to handle the values
-    const parseIntervalToDurationInHours = (interval: string): number => {
-      const match = interval.match(/^PT?(\d+)([DHM])$/)
-      if (!match) return 1
-
-      const value = parseInt(match[1], 10)
-      const unitType = match[2]
-
-      switch (unitType) {
-        case 'D': return 1 // Daily values are already total energy
-        case 'H': return value
-        case 'M': return value / 60
-        default: return 1
-      }
-    }
-
-    const getIntervalMultiplier = (interval: string, valueUnit: string): number => {
-      if (valueUnit === 'Wh' || valueUnit === 'WH') return 1
-      if (valueUnit === 'W') {
-        return parseIntervalToDurationInHours(interval)
-      }
-      return 1
-    }
-
-    const intervalMultiplier = getIntervalMultiplier(intervalLength, unit)
+    // Énergie (Wh) d'un relevé, au pas qui lui est propre (MED-24)
+    const toWh = (reading: MeasureReading) => readingEnergyWh(reading, unit, intervalLength)
 
     const monthlyData: Record<string, number> = {}
     const monthYearData: Record<string, Record<string, number>> = {}
@@ -122,7 +100,7 @@ export function useConsumptionCalcs({
 
       if (!dateStr || isNaN(rawValue)) return
 
-      const value = rawValue * intervalMultiplier
+      const value = toWh(reading)
       const readingDate = new Date(dateStr)
       const year = dateStr.substring(0, 4)
       const month = dateStr.substring(0, 7)
@@ -227,7 +205,7 @@ export function useConsumptionCalcs({
         const dateStr = reading.date?.split('T')[0] || reading.date
         if (!dateStr || !dateStr.startsWith(year) || isNaN(rawValue)) return
 
-        const value = rawValue * intervalMultiplier
+        const value = toWh(reading)
         const month = dateStr.substring(0, 7)
         monthlyMap[month] = (monthlyMap[month] || 0) + value
       })
@@ -340,7 +318,7 @@ export function useConsumptionCalcs({
         if (!dateStr || isNaN(rawValue)) return
         const readingDate = new Date(dateStr + 'T12:00:00')
         if (readingDate >= start && readingDate <= end) {
-          total += rawValue * intervalMultiplier
+          total += toWh(reading)
         }
       })
       return total
@@ -355,7 +333,7 @@ export function useConsumptionCalcs({
         if (!dateStr || isNaN(rawValue)) return
         const readingDate = new Date(dateStr + 'T12:00:00')
         if (readingDate >= start && readingDate <= end) {
-          const value = rawValue * intervalMultiplier
+          const value = toWh(reading)
           const month = dateStr.substring(0, 7)
           monthlyMap[month] = (monthlyMap[month] || 0) + value
         }
@@ -530,31 +508,7 @@ export function useConsumptionCalcs({
 
     const readings = getReadings(detailData)
     const unit = getUnit(detailData) || 'W'
-    const intervalLength = getIntervalLength(detailData) || 'P30M'
-
-    const parseIntervalToDurationInHours = (interval: string): number => {
-      const match = interval.match(/^PT?(\d+)([DHM])$/)
-      if (!match) return 0.5
-
-      const value = parseInt(match[1], 10)
-      const unitType = match[2]
-
-      switch (unitType) {
-        case 'D': return value * 24
-        case 'H': return value
-        case 'M': return value / 60
-        default: return 0.5
-      }
-    }
-
-    const getIntervalMultiplier = (interval: string, valueUnit: string): number => {
-      if (valueUnit === 'Wh' || valueUnit === 'WH') return 1
-      if (valueUnit === 'W') {
-        return parseIntervalToDurationInHours(interval)
-      }
-      return 1
-    }
-
+    const intervalLength = getIntervalLength(detailData) || 'PT30M'
 
     // Group readings by day
     const dayMap: Record<string, any[]> = {}
@@ -589,12 +543,9 @@ export function useConsumptionCalcs({
       }
 
       const rawValue = parseFloat(reading.value || 0)
-      const pointInterval = reading.interval_length || intervalLength
-      const pointMultiplier = getIntervalMultiplier(pointInterval, unit)
-      const pointDurationHours = parseIntervalToDurationInHours(pointInterval)
-      const energyWh = rawValue * pointMultiplier
+      const energyWh = readingEnergyWh(reading, unit, intervalLength)
       const energyKwh = energyWh / 1000
-      const averagePowerW = pointDurationHours > 0 ? energyWh / pointDurationHours : rawValue
+      const averagePowerW = energyWh / readingHours(reading, intervalLength)
       const averagePowerKw = averagePowerW / 1000
 
       dayMap[dateStr].push({
@@ -644,21 +595,7 @@ export function useConsumptionCalcs({
 
       const readings = getReadings(data)
       const unit = getUnit(data) || 'W'
-      const intervalLength = getIntervalLength(data) || 'P30M'
-
-
-      const parseIntervalToDurationInHours = (interval: string): number => {
-        const match = interval.match(/^PT?(\d+)([DHM])$/)
-        if (!match) return 0.5
-        const value = parseInt(match[1], 10)
-        const unitType = match[2]
-        switch (unitType) {
-          case 'D': return value * 24
-          case 'H': return value
-          case 'M': return value / 60
-          default: return 0.5
-        }
-      }
+      const intervalLength = getIntervalLength(data) || 'PT30M'
 
       readings.forEach((reading: any) => {
         if (!reading.date || Number.isNaN(reading.value)) return
@@ -668,9 +605,7 @@ export function useConsumptionCalcs({
           : reading.date.replace(' ', 'T')
         const apiDateTime = new Date(dateTimeStr)
 
-        const pointInterval = reading.interval_length || intervalLength
-        const pointMultiplier = unit === 'W' ? parseIntervalToDurationInHours(pointInterval) : 1
-        const energyWh = parseFloat(reading.value) * pointMultiplier
+        const energyWh = readingEnergyWh(reading, unit, intervalLength)
         const energyKwh = energyWh / 1000
 
         const hour = apiDateTime.getHours()
@@ -759,30 +694,14 @@ export function useConsumptionCalcs({
 
       const readings = getReadings(data)
       const unit = getUnit(data) || 'W'
-      const intervalLength = getIntervalLength(data) || 'P30M'
-
-
-      const parseIntervalToDurationInHours = (interval: string): number => {
-        const match = interval.match(/^PT?(\d+)([DHM])$/)
-        if (!match) return 0.5
-        const value = parseInt(match[1], 10)
-        const unitType = match[2]
-        switch (unitType) {
-          case 'D': return value * 24
-          case 'H': return value
-          case 'M': return value / 60
-          default: return 0.5
-        }
-      }
+      const intervalLength = getIntervalLength(data) || 'PT30M'
 
       readings.forEach((reading: any) => {
         if (!reading.date || Number.isNaN(reading.value)) return
 
         const dateTimeStr = reading.date.includes('T') ? reading.date : reading.date.replace(' ', 'T')
         const apiDateTime = new Date(dateTimeStr)
-        const pointInterval = reading.interval_length || intervalLength
-        const pointMultiplier = unit === 'W' ? parseIntervalToDurationInHours(pointInterval) : 1
-        const energyWh = parseFloat(reading.value) * pointMultiplier
+        const energyWh = readingEnergyWh(reading, unit, intervalLength)
         const energyKwh = energyWh / 1000
         const hour = apiDateTime.getHours()
         const minute = apiDateTime.getMinutes()

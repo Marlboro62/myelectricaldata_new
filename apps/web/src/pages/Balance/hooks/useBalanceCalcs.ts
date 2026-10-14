@@ -1,29 +1,9 @@
 import { useMemo } from 'react'
 import type { EnedisMeasure, MeasureReading } from '@/types/api'
-import { getIntervalLength, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh } from '@/utils/enedisMeasure'
 import type { BalanceChartData, YearlyBalance, MonthlyBalance, DailyBalance } from '../types/balance.types'
 
 const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
-
-function getIntervalMultiplier(intervalLength?: string, unit?: string): number {
-  // If unit is already Wh, no conversion needed
-  if (unit === 'Wh' || unit === 'WH') return 1
-
-  // For W (power), multiply by interval duration in hours to get Wh
-  if (unit === 'W') {
-    const match = intervalLength?.match(/^PT?(\d+)([DHM])$/)
-    if (!match) return 1
-    const val = parseInt(match[1], 10)
-    const u = match[2]
-    switch (u) {
-      case 'D': return 1 // Daily values are already total energy
-      case 'H': return val
-      case 'M': return val / 60
-      default: return 1
-    }
-  }
-  return 1
-}
 
 export function useBalanceCalcs(
   consumptionData: EnedisMeasure | null,
@@ -44,22 +24,19 @@ export function useBalanceCalcs(
     const productionInterval = getIntervalLength(productionData)
     const productionUnit = getUnit(productionData)
 
-    const consumptionMultiplier = getIntervalMultiplier(consumptionInterval, consumptionUnit)
-    const productionMultiplier = getIntervalMultiplier(productionInterval, productionUnit)
-
     // Create maps for quick lookup by date
     const consumptionByDate = new Map<string, number>()
     const productionByDate = new Map<string, number>()
 
     consumptionReadings.forEach((reading: MeasureReading) => {
       const date = reading.date?.split('T')[0] || reading.date
-      const value = reading.value * consumptionMultiplier
+      const value = readingEnergyWh(reading, consumptionUnit, consumptionInterval)
       consumptionByDate.set(date, (consumptionByDate.get(date) || 0) + value)
     })
 
     productionReadings.forEach((reading: MeasureReading) => {
       const date = reading.date?.split('T')[0] || reading.date
-      const value = reading.value * productionMultiplier
+      const value = readingEnergyWh(reading, productionUnit, productionInterval)
       productionByDate.set(date, (productionByDate.get(date) || 0) + value)
     })
 
@@ -192,18 +169,16 @@ export function useBalanceCalcs(
       const detailProdInterval = getIntervalLength(productionDetailData)
       const detailProdUnit = getUnit(productionDetailData)
 
-      const detailConsoMultiplier = getIntervalMultiplier(detailConsoInterval, detailConsoUnit)
-      const detailProdMultiplier = getIntervalMultiplier(detailProdInterval, detailProdUnit)
-
+      // Chaque relevé compte pour son propre pas : une courbe peut passer de PT30M à PT10M (MED-24)
       getReadings(consumptionDetailData).forEach((reading: MeasureReading) => {
         const timestamp = reading.date
-        const value = reading.value * detailConsoMultiplier
+        const value = readingEnergyWh(reading, detailConsoUnit, detailConsoInterval)
         detailConsumption.set(timestamp, value)
       })
 
       getReadings(productionDetailData).forEach((reading: MeasureReading) => {
         const timestamp = reading.date
-        const value = reading.value * detailProdMultiplier
+        const value = readingEnergyWh(reading, detailProdUnit, detailProdInterval)
         detailProduction.set(timestamp, value)
       })
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { ProductionAPIResponse, DetailAPIResponse } from '../types/production.types'
-import { getIntervalLength, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
 
 interface UseProductionCalcsProps {
   productionData: ProductionAPIResponse | null
@@ -22,30 +22,6 @@ export function useProductionCalcs({
     const unit = getUnit(productionData) || 'W'
     const intervalLength = getIntervalLength(productionData) || 'P1D'
 
-    const parseIntervalToDurationInHours = (interval: string): number => {
-      const match = interval.match(/^PT?(\d+)([DHM])$/)
-      if (!match) return 1
-
-      const value = parseInt(match[1], 10)
-      const unitType = match[2]
-
-      switch (unitType) {
-        case 'D': return 1
-        case 'H': return value
-        case 'M': return value / 60
-        default: return 1
-      }
-    }
-
-    const getIntervalMultiplier = (interval: string, valueUnit: string): number => {
-      if (valueUnit === 'Wh' || valueUnit === 'WH') return 1
-      if (valueUnit === 'W') {
-        return parseIntervalToDurationInHours(interval)
-      }
-      return 1
-    }
-
-    const intervalMultiplier = getIntervalMultiplier(intervalLength, unit)
 
     const monthlyData: Record<string, number> = {}
     const monthYearData: Record<string, Record<string, number>> = {}
@@ -104,7 +80,8 @@ export function useProductionCalcs({
 
       if (!dateStr || isNaN(rawValue)) return
 
-      const value = rawValue * intervalMultiplier
+      // Énergie (Wh) du relevé, au pas qui lui est propre (MED-24)
+      const value = readingEnergyWh(reading, unit, intervalLength)
       const readingDate = new Date(dateStr)
       const year = dateStr.substring(0, 4)
       const month = dateStr.substring(0, 7)
@@ -215,56 +192,30 @@ export function useProductionCalcs({
 
     const readings = getReadings(detailData)
     const unit = getUnit(detailData) || 'W'
-    const intervalLength = getIntervalLength(detailData) || 'P30M'
-
-    const parseIntervalToDurationInHours = (interval: string): number => {
-      const match = interval.match(/^PT?(\d+)([DHM])$/)
-      if (!match) return 0.5
-
-      const value = parseInt(match[1], 10)
-      const unitType = match[2]
-
-      switch (unitType) {
-        case 'D': return value * 24
-        case 'H': return value
-        case 'M': return value / 60
-        default: return 0.5
-      }
-    }
-
-    const getIntervalMultiplier = (interval: string, valueUnit: string): number => {
-      if (valueUnit === 'Wh' || valueUnit === 'WH') return 1
-      if (valueUnit === 'W') {
-        return parseIntervalToDurationInHours(interval)
-      }
-      return 1
-    }
-
-    const intervalDurationHours = parseIntervalToDurationInHours(intervalLength)
-    const intervalDurationMinutes = intervalDurationHours * 60
+    const intervalLength = getIntervalLength(detailData) || 'PT30M'
 
     const dayMap: Record<string, any[]> = {}
 
     readings.forEach((reading) => {
       if (!reading.date) return
 
-      let apiDateTime: Date
+      // Le backend horodate déjà chaque point au DÉBUT de son intervalle (shift_points_to_interval_start) :
+      // ne pas le reculer une seconde fois, qui plus est du pas du premier point (MED-24)
+      let measurementDateTime: Date
 
       if (reading.date.includes('T')) {
-        apiDateTime = new Date(reading.date)
+        measurementDateTime = new Date(reading.date)
       } else if (reading.date.includes(' ')) {
-        apiDateTime = new Date(reading.date.replace(' ', 'T'))
+        measurementDateTime = new Date(reading.date.replace(' ', 'T'))
       } else {
-        apiDateTime = new Date(reading.date + 'T00:00:00')
+        measurementDateTime = new Date(reading.date + 'T00:00:00')
       }
 
-      const actualDateTime = new Date(apiDateTime.getTime() - intervalDurationMinutes * 60 * 1000)
-
-      const year = actualDateTime.getFullYear()
-      const month = String(actualDateTime.getMonth() + 1).padStart(2, '0')
-      const day = String(actualDateTime.getDate()).padStart(2, '0')
-      const hours = String(actualDateTime.getHours()).padStart(2, '0')
-      const minutes = String(actualDateTime.getMinutes()).padStart(2, '0')
+      const year = measurementDateTime.getFullYear()
+      const month = String(measurementDateTime.getMonth() + 1).padStart(2, '0')
+      const day = String(measurementDateTime.getDate()).padStart(2, '0')
+      const hours = String(measurementDateTime.getHours()).padStart(2, '0')
+      const minutes = String(measurementDateTime.getMinutes()).padStart(2, '0')
 
       const dateStr = `${year}-${month}-${day}`
       const time = `${hours}:${minutes}`
@@ -273,13 +224,10 @@ export function useProductionCalcs({
         dayMap[dateStr] = []
       }
 
-      const pointInterval = reading.interval_length || intervalLength
-      const pointMultiplier = getIntervalMultiplier(pointInterval, unit)
-      const pointDurationHours = parseIntervalToDurationInHours(pointInterval)
       const rawValue = reading.value
-      const energyWh = rawValue * pointMultiplier
+      const energyWh = readingEnergyWh(reading, unit, intervalLength)
       const energyKwh = energyWh / 1000
-      const averagePowerW = pointDurationHours > 0 ? energyWh / pointDurationHours : rawValue
+      const averagePowerW = energyWh / readingHours(reading, intervalLength)
       const averagePowerKw = averagePowerW / 1000
 
       dayMap[dateStr].push({
@@ -288,7 +236,7 @@ export function useProductionCalcs({
         energyWh,
         energyKwh,
         rawValue,
-        datetime: actualDateTime.toISOString(),
+        datetime: measurementDateTime.toISOString(),
         apiDatetime: reading.date
       })
     })

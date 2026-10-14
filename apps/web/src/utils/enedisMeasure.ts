@@ -68,6 +68,32 @@ export function getIntervalLength(data: unknown): string | undefined {
   return meterReading?.reading_type?.interval_length ?? meterReading?.interval_reading?.[0]?.interval_length
 }
 
+/** Durée d'un pas en heures (PT10M → 1/6, PT30M → 0,5, PT1H → 1, P1D → 24) ; undefined si absent ou illisible */
+export function intervalToHours(interval?: string): number | undefined {
+  const match = interval?.match(/^P(?:(\d+)D|T(\d+)([HM]))$/)
+  if (!match) return undefined
+  if (match[1]) return parseInt(match[1], 10) * 24
+  const value = parseInt(match[2], 10)
+  return match[3] === 'H' ? value : value / 60
+}
+
+// Pas historique des courbes de charge Enedis, quand ni le relevé ni la mesure n'en donnent un lisible
+const DEFAULT_INTERVAL_HOURS = 0.5
+
+/**
+ * Durée couverte par un relevé, en heures : son propre pas, sinon le pas de la mesure, sinon 30 min.
+ * Le pas peut changer au sein d'une même courbe (compteur reconfiguré PT30M → PT10M, passage en PT15M) :
+ * ne jamais appliquer à toute la courbe le pas de son premier point (MED-24).
+ */
+export function readingHours(reading: MeasureReading, defaultInterval?: string): number {
+  return intervalToHours(reading.interval_length) ?? intervalToHours(defaultInterval) ?? DEFAULT_INTERVAL_HOURS
+}
+
+/** Énergie d'un relevé en Wh : une puissance (W) × la durée de SON pas ; une valeur déjà en énergie reste telle quelle */
+export function readingEnergyWh(reading: MeasureReading, unit?: string, defaultInterval?: string): number {
+  return unit === 'W' ? reading.value * readingHours(reading, defaultInterval) : reading.value
+}
+
 /** Réponse 2026 reconstruite à partir de lectures (cache React Query, données de démo) */
 export function buildMeasure(
   readings: MeasureReading[],
