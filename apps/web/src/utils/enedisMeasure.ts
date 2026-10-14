@@ -94,6 +94,21 @@ export function readingEnergyWh(reading: MeasureReading, unit?: string, defaultI
   return unit === 'W' ? reading.value * readingHours(reading, defaultInterval) : reading.value
 }
 
+/**
+ * Puissance moyenne (kW) de relevés, indexée par heure de début « HH:MM » : la grandeur tracée par
+ * les courbes détaillées, et une jointure par heure qui reste juste quand deux jours n'ont pas le même pas
+ */
+export function powerKwByTime(readings: MeasureReading[], unit?: string, defaultInterval?: string): Map<string, number> {
+  return new Map(
+    readings
+      .filter((reading) => reading.date?.length >= 16)
+      .map((reading) => [
+        reading.date.slice(11, 16),
+        readingEnergyWh(reading, unit, defaultInterval) / readingHours(reading, defaultInterval) / 1000,
+      ]),
+  )
+}
+
 /** Réponse 2026 reconstruite à partir de lectures (cache React Query, données de démo) */
 export function buildMeasure(
   readings: MeasureReading[],

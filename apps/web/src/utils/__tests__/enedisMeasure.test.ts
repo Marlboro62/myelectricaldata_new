@@ -9,8 +9,9 @@ import {
   getAddressSummary,
   intervalToHours,
   readingEnergyWh,
+  powerKwByTime,
 } from '../enedisMeasure'
-import { mixedCurve } from '@/test/loadCurve'
+import { dayReadings, mixedCurve } from '@/test/loadCurve'
 
 const measure2026 = {
   idPrm: '99999999999991',
@@ -175,5 +176,26 @@ describe('enedisMeasure — pas et énergie par relevé', () => {
     const totalWh = readings.reduce((sum, r) => sum + readingEnergyWh(r, 'W', getIntervalLength(mixedCurve())), 0)
     expect(readings).toHaveLength(192)
     expect(totalWh / 1000).toBeCloseTo(48)
+  })
+})
+
+describe('enedisMeasure — puissance par heure (courbes de comparaison)', () => {
+  it('puissance moyenne en kW, quel que soit le pas', () => {
+    const at30 = powerKwByTime(dayReadings('2026-09-22', 'PT30M', 1000), 'W')
+    const at10 = powerKwByTime(dayReadings('2026-09-22', 'PT10M', 1000), 'W')
+    expect(at30.get('00:30')).toBeCloseTo(1)
+    expect(at10.get('00:10')).toBeCloseTo(1)
+    expect(at30.size).toBe(48)
+    expect(at10.size).toBe(144)
+  })
+
+  it('jointure par heure : un pas plus grossier laisse les autres heures vides', () => {
+    const at30 = powerKwByTime(dayReadings('2026-09-22', 'PT30M', 1000), 'W')
+    expect(at30.get('00:10')).toBeUndefined()
+  })
+
+  it('énergie (Wh) ramenée à une puissance moyenne', () => {
+    const map = powerKwByTime([{ date: '2026-09-22T10:00:00', value: 250, interval_length: 'PT15M' }], 'Wh')
+    expect(map.get('10:00')).toBeCloseTo(1)
   })
 })

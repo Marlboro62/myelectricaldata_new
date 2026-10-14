@@ -5,7 +5,7 @@ import { toast } from '@/stores/notificationStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { logger } from '@/utils/logger'
 import { useResponsiveDayCount } from '@/hooks/useResponsiveDayCount'
-import { getIntervalLength, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, powerKwByTime } from '@/utils/enedisMeasure'
 
 /**
  * Composant de bouton moderne réutilisable
@@ -350,30 +350,13 @@ export function DetailedCurve({
       }
 
       if (weekAgoReadings && weekAgoMeterData) {
-        const readings = weekAgoReadings
-        const unit = getUnit(weekAgoMeterData) || 'W'
-        const intervalLength = getIntervalLength(weekAgoMeterData) || 'PT30M'
+        // Puissance moyenne (kW) comme la courbe principale, jointe par heure : le pas peut différer d'un jour à l'autre (MED-24)
+        const powerByTime = powerKwByTime(weekAgoReadings, getUnit(weekAgoMeterData) || 'W', getIntervalLength(weekAgoMeterData) || 'PT30M')
 
-        const parseInterval = (interval: string): number => {
-          const match = interval.match(/^P(?:T)?(\d+)([DHM])$/)
-          if (!match) return 0.5
-          const value = parseInt(match[1], 10)
-          const unitType = match[2]
-          return unitType === 'D' ? value * 24 : unitType === 'H' ? value : value / 60
-        }
-
-        mergedData = mergedData.map((current, idx) => {
-          const weekAgoReading = readings[idx]
-          const pointInterval = weekAgoReading?.interval_length || intervalLength
-          const pointMultiplier = unit === 'W' ? parseInterval(pointInterval) : 1
-          const power = weekAgoReading
-            ? (weekAgoReading.value * pointMultiplier) / 1000
-            : null
-          return {
-            ...current,
-            powerWeekAgo: power
-          }
-        })
+        mergedData = mergedData.map((current) => ({
+          ...current,
+          powerWeekAgo: powerByTime.get(current.time) ?? null
+        }))
       }
     }
 
@@ -416,30 +399,13 @@ export function DetailedCurve({
       }
 
       if (yearAgoReadings && yearAgoMeterData) {
-        const readings = yearAgoReadings
-        const unit = getUnit(yearAgoMeterData) || 'W'
-        const intervalLength = getIntervalLength(yearAgoMeterData) || 'PT30M'
+        // Puissance moyenne (kW) comme la courbe principale, jointe par heure : le pas peut différer d'un jour à l'autre (MED-24)
+        const powerByTime = powerKwByTime(yearAgoReadings, getUnit(yearAgoMeterData) || 'W', getIntervalLength(yearAgoMeterData) || 'PT30M')
 
-        const parseInterval = (interval: string): number => {
-          const match = interval.match(/^P(?:T)?(\d+)([DHM])$/)
-          if (!match) return 0.5
-          const value = parseInt(match[1], 10)
-          const unitType = match[2]
-          return unitType === 'D' ? value * 24 : unitType === 'H' ? value : value / 60
-        }
-
-        mergedData = mergedData.map((current, idx) => {
-          const yearAgoReading = readings[idx]
-          const pointInterval = yearAgoReading?.interval_length || intervalLength
-          const pointMultiplier = unit === 'W' ? parseInterval(pointInterval) : 1
-          const power = yearAgoReading
-            ? (yearAgoReading.value * pointMultiplier) / 1000
-            : null
-          return {
-            ...current,
-            powerYearAgo: power
-          }
-        })
+        mergedData = mergedData.map((current) => ({
+          ...current,
+          powerYearAgo: powerByTime.get(current.time) ?? null
+        }))
       }
     }
 
@@ -950,6 +916,7 @@ export function DetailedCurve({
                     <Line
                       type="monotone"
                       dataKey="powerWeekAgo"
+                      connectNulls
                       stroke="#10B981"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -961,6 +928,7 @@ export function DetailedCurve({
                     <Line
                       type="monotone"
                       dataKey="powerYearAgo"
+                      connectNulls
                       stroke="#F59E0B"
                       strokeWidth={2}
                       strokeDasharray="5 5"
