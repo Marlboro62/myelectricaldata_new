@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from src.adapters.demo_adapter import DemoAdapter
@@ -37,6 +38,20 @@ def days(start: str, end: str) -> list[str]:
     return out
 
 
+def enedis_http_error(status: int, as_value_error: bool) -> Exception:
+    """Refus HTTP d'Enedis tel que le lève l'adaptateur : ValueError « code: description » chaînée au
+    HTTPStatusError quand le corps porte `error`, HTTPStatusError brut sinon."""
+    request = httpx.Request("GET", "https://gw.ext.prod.api.enedis.fr/mesure_synchrone_auto/v2/courbe_de_charge_production")
+    body = {"error": "Bad Request" if status == 400 else "Error", "error_description": "refus Enedis"}
+    response = httpx.Response(status, request=request, json=body)
+    cause = httpx.HTTPStatusError(f"Client error '{status}'", request=request, response=response)
+    if not as_value_error:
+        return cause
+    error = ValueError(f"{body['error']}: {body['error_description']}")
+    error.__cause__ = cause
+    return error
+
+
 class FakeEnedis:
     """Data Connect 2026 : dateFin exclue, dateDebut < dateFin exigé, données jusqu'à J-1."""
 
@@ -50,11 +65,17 @@ class FakeEnedis:
         self.partial: set[str] = set()  # jours dont la courbe de production n'a que 30 points sur 48
         self.activation: str | None = None  # mise en service : avant, ADAM-ERR0123 rendu en dict (sans exception)
         self.failing = False  # Enedis indisponible : chaque appel lève une exception
+        # plage qui commence avant cette date refusée en HTTP (400 : pas d'historique, MED-43)
+        self.rejected_before: str | None = None
+        self.rejected_status = 400
+        self.rejected_as_value_error = True
 
     def _days(self, kind: str, start: str, end: str) -> list[str]:
         self.calls.append((kind, start, end))
         if self.failing:
             raise RuntimeError("503 Service Unavailable")
+        if self.rejected_before and start < self.rejected_before:
+            raise enedis_http_error(self.rejected_status, self.rejected_as_value_error)
         if start >= end:
             raise RuntimeError(f"ADAM-ERR0069 dateDebut {start} >= dateFin {end}")
         last = date.fromisoformat(j(self.published_until))
@@ -539,6 +560,58 @@ async def test_production_adam_err0123_memorise_pour_la_meme_plage(enedis, cache
     assert enedis.calls == [(kind, j(25), j(15))]
     assert not first.success and not second.success
     assert "ADAM-ERR0123" in second.error.message
+
+
+# Refus HTTP 400 d'une plage (courbe de production sans historique, limite d'historique : MED-43).
+# Un conteneur local resynchronise les mêmes fenêtres toutes les 30 min : la plage EXACTE refusée
+# est mémorisée comme ADAM-ERR0123, une autre plage reste demandée. Un 404 (J-1 pas encore publié,
+# MED-20) et une erreur serveur ne sont jamais mémorisés.
+RANGE_CACHE = pytest.mark.parametrize(
+    "handler, kind",
+    [("get_max_power", "power"), ("get_production_daily", "prod_daily"), ("get_production_detail", "prod_detail")],
+)
+
+
+@RANGE_CACHE
+@pytest.mark.parametrize("as_value_error", [True, False])
+async def test_refus_400_memorise_pour_la_meme_plage(enedis, cache, handler, kind, as_value_error):
+    enedis.rejected_before = j(20)
+    enedis.rejected_as_value_error = as_value_error
+    first = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+    second = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15))]
+    assert not first.success and not second.success
+
+
+@RANGE_CACHE
+async def test_refus_400_une_autre_plage_reste_demandee(enedis, cache, handler, kind):
+    enedis.rejected_before = j(20)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    data = await call(getattr(router, handler), j(19), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15)), (kind, j(19), j(15))]
+    assert served_days(data) == days(j(19), j(15))
+
+
+@RANGE_CACHE
+@pytest.mark.parametrize("status", [404, 429, 503])
+async def test_refus_non_400_jamais_memorise(enedis, cache, handler, kind, status):
+    enedis.rejected_before = j(20)
+    enedis.rejected_status = status
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert enedis.calls == [(kind, j(25), j(15))] * 2
+
+
+@RANGE_CACHE
+async def test_refus_400_ne_marque_pas_les_jours_vides(enedis, cache, handler, kind):
+    enedis.rejected_before = j(20)
+    await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
+
+    assert router.EMPTY_DAY not in cache.store.values()
 
 
 async def test_production_detail_jour_recent_partiel_servi_si_enedis_echoue(enedis, cache):

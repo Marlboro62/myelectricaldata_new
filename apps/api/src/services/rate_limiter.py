@@ -1,8 +1,11 @@
 """Rate limiter service for tracking user API usage"""
+import logging
 from datetime import datetime, timedelta, UTC
 from typing import Tuple
 from .cache import cache_service
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiterService:
@@ -38,17 +41,18 @@ class RateLimiterService:
         current = await cache_service.redis_client.get(key)
         current_count = int(current) if current else 0
 
-        # Check if limit exceeded (admins won't reach this)
-        if current_count >= limit:
-            return False, current_count, limit
-
-        # Increment counter (including for admins now, for statistics)
-        new_count = current_count + 1
-
         # Set with TTL until end of day
         now = datetime.now(UTC)
         end_of_day = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
         ttl_seconds = int((end_of_day - now).total_seconds())
+
+        # Check if limit exceeded (admins won't reach this)
+        if current_count >= limit:
+            await self._warn_first_refusal(user_id, cache_used, current_count, limit, endpoint, ttl_seconds)
+            return False, current_count, limit
+
+        # Increment counter (including for admins now, for statistics)
+        new_count = current_count + 1
 
         await cache_service.redis_client.setex(key, ttl_seconds, str(new_count))
 
@@ -60,6 +64,24 @@ class RateLimiterService:
             await cache_service.redis_client.setex(endpoint_key, ttl_seconds, str(endpoint_count + 1))
 
         return True, new_count, limit
+
+    async def _warn_first_refusal(
+        self, user_id: str, cache_used: bool, count: int, limit: int, endpoint: str | None, ttl_seconds: int
+    ) -> None:
+        """Journalise le premier refus du jour d'un quota (MED-43), une seule fois par utilisateur et par type.
+
+        Le compteur ne bouge plus une fois la limite atteinte : un marqueur SET NX qui expire à minuit UTC,
+        comme le compteur, distingue le premier refus des suivants. Préfixe à part : les statistiques
+        admin lisent toutes les clés `rate_limit:*` comme des compteurs.
+        """
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        cache_type = "cached" if cache_used else "no_cache"
+        marker = f"rate_limit_warned:{user_id}:{cache_type}:{today}"
+        if await cache_service.redis_client.set(marker, "1", ex=max(ttl_seconds, 1), nx=True):
+            logger.warning(
+                f"[RATE LIMIT] Quota journalier {cache_type} atteint pour l'utilisateur {user_id} "
+                f"({count}/{limit}) sur {endpoint or '?'} : appels refusés jusqu'à minuit UTC"
+            )
 
     async def get_usage_stats(self, user_id: str) -> dict:
         """Get current usage statistics for a user"""

@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 from datetime import datetime, UTC, timedelta
 from typing import Any, cast, Optional
+import httpx
 from fastapi import APIRouter, Depends, Query, Request, Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,6 +205,13 @@ RECENT_TTL_SECONDS = 3 * 3600
 EMPTY_DAY = {"empty": True}  # marqueur de cache : jour ancien sans mesure chez Enedis
 EXPECTED_READINGS = {"PT10M": 144, "PT15M": 96, "PT30M": 48, "PT60M": 24}  # points par jour selon le pas de la courbe
 
+# Cache passerelle par défaut (MED-43) : un appelant qui n'envoie pas use_cache (conteneur local <= 2.1.x,
+# script tiers) passe par le cache jour par jour et le quota avec cache, au lieu de rappeler Enedis à chaque fois
+USE_CACHE_DESCRIPTION = (
+    "Use the gateway cache (default). use_cache=false fetches fresh data from Enedis "
+    "and counts against the daily no-cache limit"
+)
+
 
 def is_recent_day(day: str, today: datetime) -> bool:
     """J-1 ou J-2 (`today` = minuit à Paris) : Enedis peut encore publier ou corriger ce jour."""
@@ -242,8 +250,24 @@ def enedis_business_error(data: Any) -> str | None:
     return None
 
 
+def enedis_rejected_range(error: BaseException) -> str | None:
+    """Refus HTTP 400 d'Enedis pour la plage demandée (courbe de production sans historique, limite
+    d'historique : MED-43), levé tel quel ou en cause du ValueError « code: description » de l'adaptateur.
+
+    Une plage passée refusée en 400 ne fait que vieillir : la redemander ne peut pas réussir avant
+    l'expiration du cache. Un 404 (J-1 pas encore publié), un 429 ou une erreur serveur peuvent passer
+    au prochain appel : jamais mémorisés.
+    """
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, httpx.HTTPStatusError) and current.response.status_code == 400:
+            return str(error)
+        current = current.__cause__
+    return None
+
+
 def range_error_key(key_prefix: str, usage_point_id: str, start: str, end: str) -> str:
-    """Cache négatif d'une plage rejetée par Enedis (ADAM-ERR0123), valable pour cette plage EXACTE.
+    """Cache négatif d'une plage rejetée par Enedis (ADAM-ERR0123, refus 400), valable pour cette plage EXACTE.
 
     Un client qui resynchronise les mêmes fenêtres antérieures à la mise en service ne rappelle
     Enedis qu'une fois par durée de cache ; une autre plage, qui commencerait après la mise en
@@ -291,6 +315,8 @@ async def cached_daily_points(
         except Exception as e:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] {key_prefix} {api_start} to {api_end}: {e}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {e}")
+            if rejected := enedis_rejected_range(e):
+                await cache_service.set(error_key, {"error": rejected}, encryption_key)
             continue
         if error := enedis_business_error(data):
             log_with_pdl("warning", usage_point_id, f"[ENEDIS ERROR] {key_prefix} {api_start} to {api_end}: {error}")
@@ -620,8 +646,8 @@ async def get_consumption_daily(
         }
     ),
     use_cache: bool = Query(
-        False,
-        description="Use cached data if available",
+        True,
+        description=USE_CACHE_DESCRIPTION,
         openapi_examples={
             "with_cache": {
                 "summary": "Use cache",
@@ -847,8 +873,8 @@ async def get_consumption_detail(
         }
     ),
     use_cache: bool = Query(
-        False,
-        description="Use cached data if available",
+        True,
+        description=USE_CACHE_DESCRIPTION,
         openapi_examples={
             "with_cache": {"summary": "Use cache", "value": True},
             "without_cache": {"summary": "Fresh data", "value": False}
@@ -1044,7 +1070,7 @@ async def get_consumption_detail_batch(
     ),
     use_cache: bool = Query(
         True,
-        description="Use cached data if available (recommended for batch requests)",
+        description=USE_CACHE_DESCRIPTION,
         openapi_examples={
             "with_cache": {"summary": "Use cache", "value": True},
             "without_cache": {"summary": "Fresh data", "value": False}
@@ -1491,7 +1517,7 @@ async def get_max_power(
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
     start: str = Query(..., description="Start date (YYYY-MM-DD)", openapi_examples={"current_year": {"summary": "Start of 2024", "value": "2024-01-01"}, "recent_month": {"summary": "Month start", "value": "2024-10-01"}}),
     end: str = Query(..., description="End date (YYYY-MM-DD), EXCLUDED like Enedis dateFin: end=today returns data up to yesterday (J-1)", openapi_examples={"current_year": {"summary": "Whole 2024 (end excluded)", "value": "2025-01-01"}, "recent_month": {"summary": "Whole October 2024 (end excluded)", "value": "2024-11-01"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -1566,7 +1592,7 @@ async def get_production_daily(
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
     start: str = Query(..., description="Start date (YYYY-MM-DD)", openapi_examples={"current_year": {"summary": "Start of 2024", "value": "2024-01-01"}, "recent_month": {"summary": "Month start", "value": "2024-10-01"}}),
     end: str = Query(..., description="End date (YYYY-MM-DD), EXCLUDED like Enedis dateFin: end=today returns data up to yesterday (J-1)", openapi_examples={"current_year": {"summary": "Whole 2024 (end excluded)", "value": "2025-01-01"}, "recent_month": {"summary": "Whole October 2024 (end excluded)", "value": "2024-11-01"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -1642,7 +1668,7 @@ async def get_production_detail(
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
     start: str = Query(..., description="Start date (YYYY-MM-DD)", openapi_examples={"current_year": {"summary": "Start of 2024", "value": "2024-01-01"}, "recent_week": {"summary": "Week start", "value": "2024-10-01"}}),
     end: str = Query(..., description="End date (YYYY-MM-DD), EXCLUDED like Enedis dateFin: end=today returns data up to yesterday (J-1)", openapi_examples={"current_year": {"summary": "Whole 2024 (end excluded)", "value": "2025-01-01"}, "recent_week": {"summary": "Week end", "value": "2024-10-07"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -1717,6 +1743,8 @@ async def get_production_detail(
                     await cache_service.set(error_key, {"error": error}, encryption_key)
             except Exception as e:
                 error = str(e)
+                if rejected := enedis_rejected_range(e):
+                    await cache_service.set(error_key, {"error": rejected}, encryption_key)
         if error:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] Production detail {api_start} to {api_end}: {error}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {error}")
@@ -1778,7 +1806,7 @@ async def get_production_detail_batch(
     ),
     use_cache: bool = Query(
         True,
-        description="Use cached data if available (recommended for batch requests)",
+        description=USE_CACHE_DESCRIPTION,
         openapi_examples={
             "with_cache": {"summary": "Use cache", "value": True},
             "without_cache": {"summary": "Fresh data", "value": False}
@@ -2223,7 +2251,7 @@ async def get_production_detail_batch(
 async def get_contract(
     request: Request,
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -2283,7 +2311,7 @@ async def get_contract(
 async def get_address(
     request: Request,
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -2335,7 +2363,7 @@ async def get_address(
 async def get_customer(
     request: Request,
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
@@ -2387,7 +2415,7 @@ async def get_customer(
 async def get_contact(
     request: Request,
     usage_point_id: str = Path(..., description="Point de livraison (14 chiffres). 💡 **Astuce**: Utilisez d'abord `GET /pdl/` pour lister vos PDL disponibles.", openapi_examples={"standard_pdl": {"summary": "Standard PDL", "value": "12345678901234"}, "test_pdl": {"summary": "Test PDL", "value": "00000000000000"}}),
-    use_cache: bool = Query(False, description="Use cached data if available", openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
+    use_cache: bool = Query(True, description=USE_CACHE_DESCRIPTION, openapi_examples={"with_cache": {"summary": "Use cache", "value": True}, "without_cache": {"summary": "Fresh data", "value": False}}),
     current_user: User = Depends(get_current_user),
     impersonated_user: Optional[User] = Depends(get_impersonation_context),
     db: AsyncSession = Depends(get_db),
