@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.6.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.6...2.6.0) (2026-10-15)
+
+### Features
+
+* **api:** MED-43 / cache négatif des refus 400 par jour ([c5e0576](https://github.com/MyElectricalData/myelectricaldata_new/commit/c5e0576a41d539d301042845cd511e5d52f37945))
+* **web:** MED-52 / proxy /api optionnel du conteneur frontend (API_PROXY_URL) ([d3e6f3e](https://github.com/MyElectricalData/myelectricaldata_new/commit/d3e6f3e1c34fd933fc68d58fdfe12b9f67142152))
+
+### Bug Fixes
+
+* **api:** MED-43 / marques par jour réservées aux refus de période ([8b9945e](https://github.com/MyElectricalData/myelectricaldata_new/commit/8b9945e1eef0b4b9c1dbb618a036d0ef8e3332f8))
+* **docker:** MED-52 / compose client avec PostgreSQL et images publiques myelectricaldata_new ([f8876ac](https://github.com/MyElectricalData/myelectricaldata_new/commit/f8876acd87c8a9318e94d094a5305468ad46a63b)), closes [#108](https://github.com/MyElectricalData/myelectricaldata_new/issues/108)
+* **docker:** MED-52 / SECRET_KEY vide par défaut au lieu d'une clé publique connue ([ca498f6](https://github.com/MyElectricalData/myelectricaldata_new/commit/ca498f6e57f4674f1044c9ef9e1b65a82832846f))
+* MED-52 / corrections de la revue (DNS du proxy, mot de passe PostgreSQL, docs Helm et serveur) ([b4d78ad](https://github.com/MyElectricalData/myelectricaldata_new/commit/b4d78ad33533a8103abd3c4ab64060628915ea8d))
+
 ## [2.5.6](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.5...2.5.6) (2026-10-15)
 
 ### Bug Fixes
