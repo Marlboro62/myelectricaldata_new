@@ -43,6 +43,21 @@ class V1SchemaError(Exception):
     """La base source n'est pas un cache.db V1 au schéma connu."""
 
 
+class TargetDatabaseError(Exception):
+    """La base du client V2 ne garantit pas l'unicité des lignes journalières (PostgreSQL < 15)."""
+
+
+async def _check_target(db: AsyncSession) -> None:
+    """Refuse PostgreSQL < 15 : sans NULLS NOT DISTINCT (migration 20260223), une ligne journalière
+    (`interval_start` NULL) n'entre jamais en conflit, et l'import la doublerait en silence."""
+    version = int((await db.execute(text("SHOW server_version_num"))).scalar_one())
+    if version < 150000:
+        raise TargetDatabaseError(
+            f"PostgreSQL {version // 10000} : l'import V1 demande PostgreSQL 15 ou plus pour la base du client "
+            "(sans quoi les journées déjà présentes seraient doublées)"
+        )
+
+
 @dataclass
 class V1Records:
     """Lignes V2 tirées d'une base V1, et décompte des lignes écartées par motif."""
@@ -283,6 +298,7 @@ async def run_import(
     url: str, db: AsyncSession, *, pdls: list[str] | None = None, dry_run: bool = False, today: date | None = None
 ) -> ImportReport:
     """Importe une base V1 dans la base du client V2 ; `dry_run` compte puis annule tout."""
+    await _check_target(db)
     records = await load_v1(url, pdls, today=today)
     known = set((await db.execute(
         select(PDL.usage_point_id).where(PDL.usage_point_id.in_(records.usage_points))

@@ -105,7 +105,8 @@ données venues d'Enedis sont conservées et l'import ne comble que les trous.
 ## Étape 3 : importer l'historique V1
 
 La commande `scripts/import_v1.py` est incluse dans l'image du backend. Elle lit le `cache.db` V1 et
-écrit dans la base de la V2.
+écrit dans la base de la V2, qui doit être en PostgreSQL 15 ou plus (le compose et le chart Helm
+fournissent PostgreSQL 16 ; seule une base externe plus ancienne est refusée).
 
 ### Avec Docker Compose
 

@@ -13,8 +13,10 @@ from src.models.client_mode import DataGranularity
 from src.services.import_v1 import (
     SOURCE,
     V1_ALEMBIC_HEAD,
+    TargetDatabaseError,
     V1SchemaError,
     load_v1,
+    run_import,
     to_source_url,
 )
 from tests.v1_cache import V1_HEAD, V1Cache
@@ -252,6 +254,24 @@ async def test_filtre_par_pdl(cache):
 
     assert records.usage_points == [AUTRE_PDL]
     assert [r["usage_point_id"] for r in records.consumption] == [AUTRE_PDL]
+
+
+class _Base14:
+    """Session factice d'un PostgreSQL 14 : seule la version est lue avant le refus."""
+
+    async def execute(self, statement):
+        class _Result:
+            def scalar_one(self):
+                return "140011"
+        return _Result()
+
+
+async def test_base_v2_postgresql_14_refusee(cache):
+    """Sans NULLS NOT DISTINCT, les journées déjà présentes seraient doublées : refus avant toute lecture ou écriture."""
+    path = cache.daily(PDL, date(2020, 1, 5), 1000).close()
+
+    with pytest.raises(TargetDatabaseError, match="PostgreSQL 14"):
+        await run_import(to_source_url(str(path)), _Base14())
 
 
 async def test_source_lue_sans_modification(cache):

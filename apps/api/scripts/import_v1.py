@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, "/app")
 
 from src.config import settings  # noqa: E402
-from src.services.import_v1 import V1SchemaError, run_import, to_source_url  # noqa: E402
+from src.services.import_v1 import TargetDatabaseError, V1SchemaError, run_import, to_source_url  # noqa: E402
 
 TABLES = {
     "consumption_data": "Consommation",
@@ -74,7 +74,7 @@ async def main(argv: list[str] | None = None) -> int:
     try:
         async with async_session_maker() as db:
             report = await run_import(url, db, pdls=args.pdls, dry_run=args.dry_run)
-    except (FileNotFoundError, V1SchemaError) as e:
+    except (FileNotFoundError, V1SchemaError, TargetDatabaseError) as e:
         print(f"Erreur : {e}", file=sys.stderr)
         return 1
     print_report(report)
