@@ -215,10 +215,15 @@ PRODUCTION (/production/daily, /production/detail), same per-day logic as /power
    is an error for the whole range : its days are never marked empty, but the exact
    range is remembered 24 hours ({prefix}:{pdl}:error:{start}:{end}) so that a client
    resyncing the same windows does not call Enedis each time
-   an HTTP 400 refusal of a range (load curve without history, history limit) is
-   remembered the same way, for the exact range only, unless the range ends on J-1 or
-   J-2 (v5 refuses an end date that is not before the current date, which changes at
-   midnight) ; 404 (J-1 not yet published), 429 and server errors are never remembered
+   an HTTP 400 refusal of a range (load curve without history, history limit) is never
+   remembered when the range ends on J-1 or J-2 (v5 refuses an end date that is not
+   before the current date, which changes at midnight). For an older range of several
+   days, its last day is requested alone : refused too, every day of the range is
+   marked refused for 7 days ({prefix}:{pdl}:rejected:{date}), so that the sliding
+   windows of a local client (recomputed from J-731 each day) are served without
+   calling Enedis ; accepted (range across the meter activation) or another error, only
+   the exact range is remembered 24 hours, so that no valid day is hidden.
+   404 (J-1 not yet published), 429 and server errors are never remembered
    (/power, /production/daily, /production/detail)
 
 CONSUMPTION DETAIL (/consumption/detail), per-day cache shared with /consumption/detail/batch:

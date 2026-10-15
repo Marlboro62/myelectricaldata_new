@@ -635,7 +635,8 @@ async def test_refus_400_memorise_pour_la_meme_plage(enedis, cache, handler, kin
     first = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
     second = await raw_call(getattr(router, handler), j(25), j(15), use_cache=True)
 
-    assert enedis.calls == [(kind, j(25), j(15))]
+    # 400 sur plusieurs jours : sonde du dernier jour, acceptée (à cheval sur j(20)) -> mémoire par plage exacte
+    assert enedis.calls == [(kind, j(25), j(15)), (kind, j(16), j(15))]
     assert not first.success and not second.success
 
 
@@ -646,7 +647,7 @@ async def test_refus_400_une_autre_plage_reste_demandee(enedis, cache, handler, 
 
     data = await call(getattr(router, handler), j(19), j(15), use_cache=True)
 
-    assert enedis.calls == [(kind, j(25), j(15)), (kind, j(19), j(15))]
+    assert enedis.calls == [(kind, j(25), j(15)), (kind, j(16), j(15)), (kind, j(19), j(15))]
     assert served_days(data) == days(j(19), j(15))
 
 
@@ -669,6 +670,39 @@ async def test_refus_400_jamais_memorise_si_la_plage_finit_sur_un_jour_recent(en
     await raw_call(getattr(router, handler), j(5), j(0), use_cache=True)
 
     assert enedis.calls == [(kind, j(5), j(0))] * 2
+
+
+@RANGE_CACHE
+async def test_refus_400_fenetre_glissante_servie_par_les_jours_refuses(enedis, cache, handler, kind):
+    # Conteneur local : fenêtres de 7 jours recalculées chaque jour depuis J-731, décalées d'un jour le lendemain
+    enedis.rejected_before = j(10)
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+    await raw_call(getattr(router, handler), j(33), j(26), use_cache=True)
+    enedis.calls.clear()
+
+    shifted = await raw_call(getattr(router, handler), j(39), j(32), use_cache=True)
+
+    assert enedis.calls == []
+    assert not shifted.success
+
+
+@RANGE_CACHE
+async def test_refus_400_jours_refuses_gardes_7_jours(enedis, cache, handler, kind):
+    enedis.rejected_before = j(10)
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+
+    rejected = {k: ttl for k, ttl in cache.ttls.items() if ":rejected:" in k}
+    assert sorted(k.rsplit(":", 1)[1] for k in rejected) == days(j(40), j(33))
+    assert set(rejected.values()) == {7 * 86400}
+
+
+@RANGE_CACHE
+async def test_refus_400_d_un_seul_jour_sans_sonde(enedis, cache, handler, kind):
+    enedis.rejected_before = j(10)
+    await raw_call(getattr(router, handler), j(40), j(39), use_cache=True)
+    await raw_call(getattr(router, handler), j(40), j(39), use_cache=True)
+
+    assert enedis.calls == [(kind, j(40), j(39))]
 
 
 @RANGE_CACHE
