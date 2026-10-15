@@ -5,7 +5,7 @@ import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnergyOffer } from '@/api/energy'
 import type { YearlyCost, MonthlyCost, SelectedOfferWithProvider } from '../types/euro.types'
 import type { APIResponse, EnedisMeasure, MeasureReading, PDL } from '@/types/api'
-import { getIntervalLength, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh } from '@/utils/enedisMeasure'
 
 interface UseConsumptionEuroCalcsProps {
   selectedPDL: string | null
@@ -168,21 +168,7 @@ export function useConsumptionEuroCalcs({
 
       const readings = getReadings(data)
       const unit = getUnit(data) || 'W'
-      const intervalLength = getIntervalLength(data) || 'P30M'
-
-      const parseIntervalToDurationInHours = (interval: string): number => {
-        const match = interval.match(/^PT?(\d+)([DHM])$/)
-        if (!match) return 0.5
-        const value = parseInt(match[1], 10)
-        const unitType = match[2]
-        switch (unitType) {
-          case 'D': return value * 24
-          case 'H': return value
-          case 'M': return value / 60
-          default: return 0.5
-        }
-      }
-
+      const intervalLength = getIntervalLength(data) || 'PT30M'
 
       readings.forEach((reading: MeasureReading) => {
         if (!reading.date || Number.isNaN(reading.value)) return
@@ -195,9 +181,8 @@ export function useConsumptionEuroCalcs({
         // Get date key for tempo lookup (YYYY-MM-DD)
         const dateKey = apiDateTime.toISOString().split('T')[0]
 
-        const pointInterval = reading.interval_length || intervalLength
-        const pointMultiplier = unit === 'W' ? parseIntervalToDurationInHours(pointInterval) : 1
-        const energyWh = reading.value * pointMultiplier
+        // Énergie du relevé, au pas qui lui est propre (MED-24)
+        const energyWh = readingEnergyWh(reading, unit, intervalLength)
         const energyKwh = energyWh / 1000
 
         const hour = apiDateTime.getHours()

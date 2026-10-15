@@ -68,6 +68,94 @@ export function getIntervalLength(data: unknown): string | undefined {
   return meterReading?.reading_type?.interval_length ?? meterReading?.interval_reading?.[0]?.interval_length
 }
 
+/** Durée d'un pas en heures (PT10M → 1/6, PT30M → 0,5, PT1H → 1, P1D → 24) ; undefined si absent ou illisible */
+export function intervalToHours(interval?: string): number | undefined {
+  const match = interval?.match(/^P(?:(\d+)D|T(\d+)([HM]))$/)
+  if (!match) return undefined
+  const hours = match[1] ? parseInt(match[1], 10) * 24 : parseInt(match[2], 10) / (match[3] === 'H' ? 1 : 60)
+  // Pas nul (PT0M) : illisible, la chaîne de repli prend le relais (pas de division par zéro)
+  return hours > 0 ? hours : undefined
+}
+
+/** Pas distincts des relevés d'une mesure (plusieurs : le compteur a changé de pas sur la période) */
+export function getIntervalLengths(data: unknown): string[] {
+  const fallback = getIntervalLength(data)
+  return Array.from(
+    new Set(getReadings(data).map((reading) => reading.interval_length ?? fallback).filter((p): p is string => !!p)),
+  )
+}
+
+// Pas historique des courbes de charge Enedis, quand ni le relevé ni la mesure n'en donnent un lisible
+const DEFAULT_INTERVAL_HOURS = 0.5
+
+/**
+ * Durée couverte par un relevé, en heures : son propre pas, sinon le pas de la mesure, sinon 30 min.
+ * Le pas peut changer au sein d'une même courbe (compteur reconfiguré PT30M → PT10M, passage en PT15M) :
+ * ne jamais appliquer à toute la courbe le pas de son premier point (MED-24).
+ */
+export function readingHours(reading: MeasureReading, defaultInterval?: string): number {
+  return intervalToHours(reading.interval_length) ?? intervalToHours(defaultInterval) ?? DEFAULT_INTERVAL_HOURS
+}
+
+/** Énergie d'un relevé en Wh : une puissance (W) × la durée de SON pas ; une valeur déjà en énergie reste telle quelle */
+export function readingEnergyWh(reading: MeasureReading, unit?: string, defaultInterval?: string): number {
+  return unit === 'W' ? reading.value * readingHours(reading, defaultInterval) : reading.value
+}
+
+// Minute de la journée d'une heure « HH:MM » du jour affiché
+const minuteOfDay = (time: string): number | undefined => {
+  const match = time.match(/^(\d{2}):(\d{2})/)
+  return match ? parseInt(match[1], 10) * 60 + parseInt(match[2], 10) : undefined
+}
+
+// Minute de la journée d'un relevé, lue comme les hooks construisent l'heure du jour affiché (Date locale) :
+// une date suffixée d'un fuseau (+01:00, compte démo) tombe ainsi dans le même créneau des deux côtés
+const readingMinuteOfDay = (date: string): number | undefined => {
+  if (!/\d{2}:\d{2}/.test(date ?? '')) return undefined
+  const parsed = new Date(date.replace(' ', 'T'))
+  return isNaN(parsed.getTime()) ? undefined : parsed.getHours() * 60 + parsed.getMinutes()
+}
+
+/**
+ * Puissance moyenne (kW) d'une courbe de comparaison, ramenée sur les créneaux du jour affiché.
+ *
+ * `times` : heures de début « HH:MM » triées du jour affiché ; chaque créneau court jusqu'au suivant, le
+ * dernier sur le même pas que l'avant-dernier. La valeur d'un créneau est la moyenne des puissances de la
+ * comparaison qui le recouvrent, pondérée par la durée de recouvrement : juste quand les deux jours n'ont
+ * pas le même pas (un pic de 10 min reste dans le créneau de 30 min qui le contient), null si rien ne le
+ * couvre (MED-24).
+ */
+export function resamplePowerKw(
+  readings: MeasureReading[],
+  times: string[],
+  unit?: string,
+  defaultInterval?: string,
+): (number | null)[] {
+  const intervals = readings.flatMap((reading) => {
+    const start = readingMinuteOfDay(reading.date)
+    if (start === undefined) return []
+    const hours = readingHours(reading, defaultInterval)
+    return [{ start, end: start + hours * 60, kw: readingEnergyWh(reading, unit, defaultInterval) / hours / 1000 }]
+  })
+  const starts = times.map(minuteOfDay)
+
+  return starts.map((start, i) => {
+    if (start === undefined) return null
+    const previous = starts[i - 1]
+    const end = starts[i + 1] ?? (previous !== undefined ? start + (start - previous) : 24 * 60)
+    let weighted = 0
+    let covered = 0
+    for (const interval of intervals) {
+      const overlap = Math.min(end, interval.end) - Math.max(start, interval.start)
+      if (overlap > 0) {
+        weighted += interval.kw * overlap
+        covered += overlap
+      }
+    }
+    return covered > 0 ? weighted / covered : null
+  })
+}
+
 /** Réponse 2026 reconstruite à partir de lectures (cache React Query, données de démo) */
 export function buildMeasure(
   readings: MeasureReading[],

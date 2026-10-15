@@ -10,7 +10,7 @@ import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import jsPDF from 'jspdf'
 import { logger } from '@/utils/logger'
-import { buildMeasure, getReadings, getUnit, hasReadings } from '@/utils/enedisMeasure'
+import { buildMeasure, getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh } from '@/utils/enedisMeasure'
 import { ModernButton } from './Simulator/components/ModernButton'
 import { useIsDemo } from '@/hooks/useIsDemo'
 import { usePdlStore } from '@/stores/pdlStore'
@@ -717,6 +717,8 @@ export default function Simulator() {
 
     consumptionData.forEach((periodData: EnedisMeasure) => {
       if (hasReadings(periodData)) {
+        const unit = getUnit(periodData) || 'W'
+        const intervalLength = getIntervalLength(periodData)
         getReadings(periodData).forEach((reading) => {
           // Valeur numérique : 0 reste une lecture valide (la chaîne "0" l'était en v5)
           if (!Number.isNaN(reading.value) && reading.date) {
@@ -731,15 +733,8 @@ export default function Simulator() {
               : reading.date.split(' ')[1]
             const hour = timePart ? parseInt(timePart.split(':')[0]) : 0
 
-            // Get interval_length for this reading (PT30M, PT60M, etc.)
-            const intervalLength = reading.interval_length || 'sont à '
-            const intervalMatch = intervalLength.match(/PT(\d+)M/)
-            const intervalMinutes = intervalMatch ? parseInt(intervalMatch[1]) : 30
-
-            // Convert W to Wh: value_wh = value_w * (interval_minutes / 60)
-            // Equivalent to: value_wh = value_w / (60 / interval_minutes)
-            const valueW = reading.value
-            const valueWh = valueW / (60 / intervalMinutes)
+            // Énergie du relevé (Wh) : puissance × SON pas, sinon celui de la mesure, sinon 30 min (MED-24)
+            const valueWh = readingEnergyWh(reading, unit, intervalLength)
 
             allConsumption.push({
               date: reading.date,

@@ -319,7 +319,8 @@ Les conteneurs de graphiques utilisent des gradients subtils :
 - **Important** : Les valeurs Enedis sont des **fins d'intervalle**
   - Si tu reçois `11h30`, la valeur couvre `11h00 → 11h30`
   - Si tu reçois `23/10/2025 00h00`, elle correspond à `22/10/2025 23h30 → 23/10/2025 00h00`
-  - Le code soustrait l'intervalle pour obtenir l'heure de début
+  - Le backend (`shift_points_to_interval_start`, `apps/api/src/adapters/enedis_format.py`) soustrait l'intervalle de chaque point : le front reçoit déjà des heures de DÉBUT d'intervalle et ne décale plus rien lui-même (MED-24)
+- **Pas variable dans une même courbe** : un compteur reconfiguré (PT30M → PT10M) ou le passage en PT15M mélange des pas dans une même réponse. Chaque relevé compte pour SON `interval_length` (`readingEnergyWh` dans `apps/web/src/utils/enedisMeasure.ts`), jamais pour celui du premier point (MED-24)
 - L'unité est dynamique : `data.meter_reading.reading_type.unit` (W, Wh, kWh, VA...)
 
 ### Retry logic ADAM-ERR0123 ✅

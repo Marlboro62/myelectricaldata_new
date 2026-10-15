@@ -3,7 +3,7 @@ import { Zap, TrendingUp, BarChart3, Database, ArrowRight, LineChart } from 'luc
 import { usePdlStore } from '@/stores/pdlStore'
 import { useDataFetchStore } from '@/stores/dataFetchStore'
 import { logger } from '@/utils/logger'
-import { getIntervalLength, getReadings } from '@/utils/enedisMeasure'
+import { getIntervalLengths, getReadings } from '@/utils/enedisMeasure'
 import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { LoadingPlaceholder } from '@/components/LoadingPlaceholder'
 import { AnimatedSection } from '@/components/AnimatedSection'
@@ -755,9 +755,13 @@ export default function ConsumptionKwh() {
                 <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
                     <strong>ℹ️ Note :</strong> Ces graphiques montrent votre consommation électrique détaillée avec des mesures à intervalles réguliers
-                    ({getIntervalLength(detailData) === 'PT30M' ? '30 minutes' :
-                      getIntervalLength(detailData) === 'PT15M' ? '15 minutes' :
-                      getIntervalLength(detailData) || 'variables'})
+                    ({(() => {
+                      // Pas de toute la courbe, pas celui du premier point : il peut changer en cours de période (MED-24)
+                      const intervals = getIntervalLengths(detailData)
+                      if (intervals.length !== 1) return 'variables'
+                      const minutes = intervals[0].match(/^PT(\d+)M$/)?.[1]
+                      return minutes ? `${minutes} minutes` : intervals[0]
+                    })()})
                     pour les 7 derniers jours.
                     Cela vous permet d'identifier précisément vos pics de consommation et d'optimiser votre utilisation.
                     <br/><br/>

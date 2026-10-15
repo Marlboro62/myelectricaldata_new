@@ -1,6 +1,6 @@
 import { Download, Zap, TrendingDown, TrendingUp, Calendar } from 'lucide-react'
 import { toast } from '@/stores/notificationStore'
-import { getIntervalLength, getReadings, getUnit } from '@/utils/enedisMeasure'
+import { getIntervalLength, getReadings, getUnit, readingEnergyWh } from '@/utils/enedisMeasure'
 
 interface YearlyStatCardsProps {
   chartData: {
@@ -34,7 +34,8 @@ const cardColors = [
 export function YearlyStatCards({ chartData, consumptionData, title }: YearlyStatCardsProps) {
   const handleExportYear = (yearData: any) => {
     const intervalLength = getIntervalLength(consumptionData) || 'P1D'
-    const unit = getUnit(consumptionData) || 'W'
+    // Mesure quotidienne : énergie en Wh, jamais multipliée par le pas (MED-24)
+    const unit = getUnit(consumptionData) || 'Wh'
 
     const startDateFormatted = yearData.startDate.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -47,39 +48,15 @@ export function YearlyStatCards({ chartData, consumptionData, title }: YearlySta
       year: 'numeric'
     })
 
-    // Parse interval to duration in hours
-    const parseIntervalToDurationInHours = (interval: string): number => {
-      const match = interval.match(/^PT?(\d+)([DHM])$/)
-      if (!match) return 1
-      const value = parseInt(match[1], 10)
-      const unit = match[2]
-      switch (unit) {
-        case 'D': return 1 // Daily values are already total energy
-        case 'H': return value
-        case 'M': return value / 60
-        default: return 1
-      }
-    }
-
-    // Get interval multiplier for this export
-    const getIntervalMultiplier = (interval: string, valueUnit: string): number => {
-      if (valueUnit === 'Wh' || valueUnit === 'WH') return 1
-      if (valueUnit === 'W') {
-        return parseIntervalToDurationInHours(interval)
-      }
-      return 1
-    }
-
-    const intervalMultiplier = getIntervalMultiplier(intervalLength, unit)
-
-    // Filter interval readings for this year and apply multiplier
+    // Relevés de l'année, chacun converti en Wh à son propre pas (MED-24)
     const yearReadings = getReadings(consumptionData).filter((reading) => {
       const date = reading.date?.split('T')[0] || reading.date
       return date && date.startsWith(yearData.year)
     }).map((reading) => ({
       date: reading.date?.split('T')[0] || reading.date,
       value_raw: reading.value || 0,
-      value_wh: (reading.value || 0) * intervalMultiplier
+      interval_length: reading.interval_length ?? intervalLength,
+      value_wh: readingEnergyWh(reading, unit, intervalLength)
     }))
 
     const jsonData = JSON.stringify({
@@ -90,7 +67,6 @@ export function YearlyStatCards({ chartData, consumptionData, title }: YearlySta
       consommation_wh: yearData.consommation,
       unit_raw: unit,
       interval_length: intervalLength,
-      interval_multiplier: intervalMultiplier,
       interval_readings: yearReadings,
       total_readings: yearReadings.length
     }, null, 2)

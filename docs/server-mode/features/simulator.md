@@ -55,21 +55,17 @@ while (currentStart < endDate) {
 Pour calculer l'énergie en **Wattheures (Wh)** :
 
 ```typescript
-Énergie(Wh) = Puissance(W) / (60 / interval_minutes);
+Énergie(Wh) = Puissance(W) × durée_du_pas(h);
 ```
 
-**Extraction de l'intervalle** :
+**Conversion** : un seul helper partagé par toutes les pages (`apps/web/src/utils/enedisMeasure.ts`) :
 
 ```typescript
-// Chaque mesure a son propre interval_length
-const intervalLength = reading.interval_length || "PT30M";
-const intervalMatch = intervalLength.match(/PT(\d+)M/);
-const intervalMinutes = intervalMatch ? parseInt(intervalMatch[1]) : 30;
-
-// Conversion W → Wh
-const valueW = parseFloat(reading.value);
-const valueWh = valueW / (60 / intervalMinutes);
+// Chaque relevé a son propre pas : le sien d'abord, sinon celui de la mesure, sinon PT30M
+const valueWh = readingEnergyWh(reading, getUnit(data) || "W", getIntervalLength(data));
 ```
+
+`intervalToHours` n'accepte que les durées ISO 8601 valides (`PT10M`, `PT15M`, `PT30M`, `PT60M`, `PT1H`, `P1D`) ; `P30M` (30 mois), `PT1D` ou `PT0M` sont illisibles et retombent sur le pas de la mesure. Une valeur déjà en énergie (Wh, kWh) n'est jamais multipliée.
 
 **Tableau de conversion** :
 
@@ -175,7 +171,7 @@ energyCost =
 
 - **Dates sans données** : Ignorées dans les calculs (pas de valeur = 0 kWh)
 - **Couleur TEMPO manquante** : Point marqué comme "UNKNOWN", exclu du calcul TEMPO
-- **interval_length manquant** : Utilisation par défaut de PT30M (30 minutes)
+- **interval_length manquant ou illisible** : pas de la mesure, sinon PT30M (30 minutes)
 
 #### Duplicats
 
