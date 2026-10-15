@@ -65,6 +65,20 @@ def _next_midnight_utc() -> datetime:
 
 
 
+# Quota de la passerelle : compté par compte et remis à zéro à minuit UTC. Gardé en mémoire
+# (un redémarrage coûte au plus un appel refusé) ; lu par sync_all, le point d'entrée du planificateur
+_quota_blocked_until: datetime | None = None
+
+
+def _quota_blocked() -> bool:
+    return _quota_blocked_until is not None and datetime.now(UTC) < _quota_blocked_until
+
+
+def _block_until_midnight_utc() -> None:
+    global _quota_blocked_until
+    _quota_blocked_until = _next_midnight_utc()
+
+
 # Verrous globaux pour éviter les syncs concurrentes
 _energy_sync_lock = asyncio.Lock()
 
@@ -172,6 +186,13 @@ class SyncService:
         logger.info("[SYNC] Starting full sync...")
         results: dict[str, Any] = {"pdls": {}, "errors": [], "started_at": datetime.now(UTC).isoformat()}
 
+        if _quota_blocked():
+            logger.info(f"[SYNC] Quota de la passerelle atteint, synchro suspendue jusqu'à {_quota_blocked_until}")
+            results["errors"].append({"pdl": None, "error": "Quota journalier atteint, reprise après minuit UTC"})
+            results["completed_at"] = datetime.now(UTC).isoformat()
+            results["success"] = False
+            return results
+
         try:
             # Get all usage points from API
             usage_points_response = await self.adapter.get_usage_points()
@@ -182,6 +203,9 @@ class SyncService:
             for up in usage_points:
                 usage_point_id = up.get("usage_point_id")
                 if not usage_point_id:
+                    continue
+                if _quota_blocked():
+                    results["pdls"][usage_point_id] = {"skipped": "rate limited"}
                     continue
 
                 try:
@@ -195,6 +219,8 @@ class SyncService:
                     ]
                     if pdl_errors:
                         results["errors"].append({"pdl": usage_point_id, "error": "; ".join(pdl_errors)})
+                    if any(e.split(": ", 1)[1].startswith("rate_limited:") for e in pdl_errors):
+                        _block_until_midnight_utc()
                 except Exception as e:
                     logger.error(f"[SYNC] Error syncing PDL {usage_point_id}: {e}")
                     results["pdls"][usage_point_id] = {"error": str(e)}

@@ -104,3 +104,47 @@ async def test_sync_pdl_stops_every_data_type_after_first_quota() -> None:
     service.adapter.get_consumption_max_power.assert_not_called()
     assert result["consumption_detail"] == "skipped (rate limited)"
     assert result["max_power"] == "skipped (rate limited)"
+
+
+def make_sync_all_service(usage_point_ids: list[str]) -> SyncService:
+    service = SyncService.__new__(SyncService)
+    service.db = MagicMock()
+    service.adapter = MagicMock()
+    service.adapter.get_usage_points = AsyncMock(
+        return_value={"usage_points": [{"usage_point_id": upid} for upid in usage_point_ids]}
+    )
+    return service
+
+
+@pytest.mark.asyncio
+async def test_sync_all_skips_remaining_pdls_once_account_quota_is_reached() -> None:
+    """Le quota de la passerelle est compté par compte : inutile d'essayer les PDL suivants."""
+    service = make_sync_all_service([PRM, "98765432109876"])
+    service.sync_pdl = AsyncMock(
+        return_value={"usage_point_id": PRM, "consumption_daily": "rate_limited: quota"}
+    )
+
+    results = await service.sync_all()
+
+    service.sync_pdl.assert_awaited_once_with(PRM)
+    assert results["success"] is False
+    assert results["pdls"]["98765432109876"] == {"skipped": "rate limited"}
+
+
+@pytest.mark.asyncio
+async def test_sync_all_waits_for_midnight_utc_after_quota() -> None:
+    """Le passage suivant du planificateur ne rappelle pas la passerelle avant minuit UTC."""
+    service = make_sync_all_service([PRM])
+    service.sync_pdl = AsyncMock(
+        return_value={"usage_point_id": PRM, "contract": "rate_limited: quota"}
+    )
+    await service.sync_all()
+    service.sync_pdl.reset_mock()
+    service.adapter.get_usage_points.reset_mock()
+
+    results = await service.sync_all()
+
+    service.adapter.get_usage_points.assert_not_called()
+    service.sync_pdl.assert_not_called()
+    assert results["success"] is False
+    assert "minuit UTC" in results["errors"][0]["error"]
