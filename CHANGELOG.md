@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.4](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.3...2.5.4) (2026-10-15)
+
+### Bug Fixes
+
+* **sync:** prise en compte du HTTP 429 et résilience de l'adresse ([28ece03](https://github.com/MyElectricalData/myelectricaldata_new/commit/28ece03b1abfe430a03dc15d45b962ea05c1cd8a))
+* **web:** MED-24 / chaque relevé compte pour son propre pas (kWh, production, bilan) ([58c76d5](https://github.com/MyElectricalData/myelectricaldata_new/commit/58c76d58305b2109b855c273586951ea37bdad8f))
+* **web:** MED-24 / comparaisons ramenées sur les créneaux du jour affiché ([1239f01](https://github.com/MyElectricalData/myelectricaldata_new/commit/1239f014dbd976ee39b1a92d33ccecbe94ca9df5))
+* **web:** MED-24 / pas par relevé dans l'Euro, le Simulateur, les exports et les comparaisons ([22cc191](https://github.com/MyElectricalData/myelectricaldata_new/commit/22cc191fe7f57c0526a123199b1cbc51d1bee875))
+* **web:** MED-24 / suites de la revue (fuseau, pas nul, replis, libellé du pas) ([d76a691](https://github.com/MyElectricalData/myelectricaldata_new/commit/d76a691af5ef9e6914a9514caaa0ae0af62c0107))
+
 ## [2.5.3](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.2...2.5.3) (2026-10-14)
 
 ### Refactoring
