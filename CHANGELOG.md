@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.1...2.7.0) (2026-10-15)
+
+### Features
+
+* **api:** MED-60 / import de l'historique du client local V1 ([9dae78c](https://github.com/MyElectricalData/myelectricaldata_new/commit/9dae78cd6d0fc8bcb435ee92428dce30219e7bee))
+
+### Bug Fixes
+
+* **api:** MED-60 / import V1 aligné sur les fenêtres de synchro V2 (revue) ([ba3b328](https://github.com/MyElectricalData/myelectricaldata_new/commit/ba3b3280bc833454c7fea00d3617f59200698ab6))
+* **api:** MED-60 / indiquer la synchro des PDL quand l'import V1 en ignore ([d1a2db4](https://github.com/MyElectricalData/myelectricaldata_new/commit/d1a2db47953a6ea37e48d6224adebbaa0bcf0c70))
+* **api:** MED-60 / refuser l'import V1 vers un PostgreSQL < 15 ([8b20c66](https://github.com/MyElectricalData/myelectricaldata_new/commit/8b20c6681a9d94872c58beca52695c47856ba0d0))
+
 ## [2.6.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.0...2.6.1) (2026-10-15)
 
 ### Bug Fixes
