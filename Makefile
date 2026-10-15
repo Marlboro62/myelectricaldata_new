@@ -132,7 +132,7 @@ up:
 	@echo "$(GREEN)Starting client mode services...$(NC)"
 	@if [ ! -f .env.local-client ]; then \
 		echo "$(RED)Error: .env.local-client not found$(NC)"; \
-		echo "$(YELLOW)Copy .env.client.example to .env.local-client and configure your credentials$(NC)"; \
+		echo "$(YELLOW)Copy .env.local-client.example to .env.local-client and configure your credentials$(NC)"; \
 		exit 1; \
 	fi
 	$(COMPOSE) up -d
@@ -146,7 +146,7 @@ up-fg:
 	@echo "$(GREEN)Starting client mode services in foreground...$(NC)"
 	@if [ ! -f .env.local-client ]; then \
 		echo "$(RED)Error: .env.local-client not found$(NC)"; \
-		echo "$(YELLOW)Copy .env.client.example to .env.local-client and configure your credentials$(NC)"; \
+		echo "$(YELLOW)Copy .env.local-client.example to .env.local-client and configure your credentials$(NC)"; \
 		exit 1; \
 	fi
 	$(COMPOSE) up
