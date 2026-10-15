@@ -258,6 +258,8 @@ export function useAIImport(state: AllOffersState) {
       for (const offer of deduplicatedOffers) {
         let isHistoricalImport = false
         let periodWarning: string | undefined
+        // Grille ouverte remplacee : close seulement si la nouvelle grille est retenue
+        let gridToClose: EnergyOffer[] = []
 
         // Offre deprecated
         if (offer.deprecated === true) {
@@ -331,12 +333,8 @@ export function useAIImport(state: AllOffersState) {
               } else {
                 // Nouvelle periode : la grille importee remplace la grille ouverte du meme nom,
                 // close a la veille dans la meme contribution (issue #145)
-                const toClose = findOpenGridToClose(existingForType, offer.offer_name, offer.valid_from)
-                const closeDate = dayBefore(offer.valid_from)
-                for (const o of toClose) {
-                  updatedOffers[o.id] = { ...(updatedOffers[o.id] || {}), valid_to: closeDate }
-                }
-                if (toClose.length === 0) {
+                gridToClose = findOpenGridToClose(existingForType, offer.offer_name, offer.valid_from)
+                if (gridToClose.length === 0) {
                   const laterGrid = existingFiltered.find(o =>
                     !o.valid_to && o.valid_from &&
                     getCleanOfferName(o.name).toLowerCase() === cleanJson &&
@@ -518,6 +516,13 @@ export function useAIImport(state: AllOffersState) {
               })
               added++
             }
+          }
+        }
+
+        if (added > 0 && offer.valid_from) {
+          const closeDate = dayBefore(offer.valid_from)
+          for (const o of gridToClose) {
+            updatedOffers[o.id] = { ...(updatedOffers[o.id] || {}), valid_to: closeDate }
           }
         }
 

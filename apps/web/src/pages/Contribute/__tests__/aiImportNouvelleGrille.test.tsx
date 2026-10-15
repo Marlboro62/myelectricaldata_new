@@ -129,6 +129,33 @@ describe('import IA : nouvelle grille d\'une offre déjà en base (issue #145)',
     expect(Object.values(result.current.state.editedOffers).some(e => e.valid_to)).toBe(false)
   })
 
+  it('ne clôt rien quand la nouvelle grille est rejetée (champs de prix manquants)', async () => {
+    const sansPrix = JSON.stringify({
+      provider_name: 'Enercoop',
+      offers: [{ offer_name: 'BasicWatt', offer_type: 'BASE', valid_from: '2026-08-01',
+        power_variants: [{ power_kva: 6, subscription_price: 26 }] }],
+    })
+    const { result } = await importer(sansPrix)
+
+    expect(Object.values(result.current.state.editedOffers).some(e => e.valid_to)).toBe(false)
+    expect(result.current.state.newPowersData).toEqual([])
+  })
+
+  it('clôt par une mise à jour une offre déjà corrigée par un import précédent', async () => {
+    // revue Codex : valid_from '2026-02-05' (import) face à '2026-02-05T00:00:00+00:00' (base)
+    const { result } = await importer(importJson('BasicWatt', '2026-02-05', [6]))
+    act(() => result.current.ai.setAiJsonInput(importJson('BasicWatt', '2026-08-01', [3, 6, 9])))
+    await act(async () => { await result.current.ai.importAIJson() })
+    act(() => result.current.state.setPriceSheetUrl('https://example.org/grille.pdf'))
+    await act(async () => { await result.current.submission.submitAllModifications(false) })
+
+    const envoyees = vi.mocked(energyApi.submitContributionBatch).mock.calls[0][0] as unknown as Array<Record<string, unknown>>
+    const b6 = envoyees.filter(c => c.existing_offer_id === 'b6' || String(c.description || '').includes('historique'))
+    expect(b6).toHaveLength(1)
+    expect(b6[0]).toMatchObject({ contribution_type: 'UPDATE_OFFER', existing_offer_id: 'b6' })
+    expect(b6[0].pricing_data).toMatchObject({ valid_to: '2026-07-31' })
+  })
+
   it('met à jour la grille existante quand la date est la même', async () => {
     const { result } = await importer(importJson('BasicWatt', '2026-02-05', [6]))
     const { state } = result.current
