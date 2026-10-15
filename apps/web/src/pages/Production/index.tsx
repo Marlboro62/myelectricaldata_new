@@ -11,6 +11,7 @@ import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { LoadingPlaceholder } from '@/components/LoadingPlaceholder'
 import { AnimatedSection } from '@/components/AnimatedSection'
 import { useIsDemo } from '@/hooks/useIsDemo'
+import { useAppMode } from '@/hooks/useAppMode'
 import { useUnifiedDataFetch } from '@/hooks/useUnifiedDataFetch'
 
 // Import custom hooks
@@ -27,6 +28,7 @@ import { DetailedCurve } from '@/components/DetailedCurve'
 export default function Production() {
   const { selectedPdl: selectedPDL, setSelectedPdl: setSelectedPDL } = usePdlStore()
   const { setIsLoading } = useDataFetchStore()
+  const { isClientMode } = useAppMode()
   const isDemo = useIsDemo()
   const demoAutoFetchDone = useRef(false)
   const lastAutoFetchPDL = useRef<string | null>(null)
@@ -729,8 +731,9 @@ export default function Production() {
                 <p><strong>📊 Source des données :</strong></p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>Les données sont récupérées depuis l'API <strong>Enedis Data Connect</strong></li>
-                  <li>Données quotidiennes : <strong>1095 jours</strong> d'historique (3 ans)</li>
-                  <li>Données détaillées (30 min) : <strong>730 jours</strong> d'historique (2 ans)</li>
+                  <li>Enedis fournit <strong>1095 jours</strong> de données quotidiennes (3 ans)</li>
+                  <li>Enedis fournit <strong>730 jours</strong> de données détaillées (30 min, 2 ans)</li>
+                  {isClientMode && <li>Mode client : tout l'historique déjà stocké en base locale (import V1 compris) est affiché, au-delà de ces limites</li>}
                   <li>Les données Enedis ne sont disponibles qu'en <strong>J-1</strong> (hier)</li>
                 </ul>
               </div>

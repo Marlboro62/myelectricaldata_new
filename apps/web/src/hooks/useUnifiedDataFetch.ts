@@ -118,7 +118,7 @@ export function useUnifiedDataFetch({
       queryClient.invalidateQueries({ queryKey: ['maxPower', selectedPDL] })
 
       // Fetch consumption daily data (3 years, or all local history)
-      updateConsumptionStatus({ daily: 'loading' })
+      updateConsumptionStatus({ daily: 'loading', dailyRange: { start: consumptionDailyStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
@@ -145,7 +145,7 @@ export function useUnifiedDataFetch({
       )
 
       // Fetch max power data (3 years, or all local history)
-      updateConsumptionStatus({ powerMax: 'loading' })
+      updateConsumptionStatus({ powerMax: 'loading', powerMaxRange: { start: maxPowerStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
@@ -172,7 +172,7 @@ export function useUnifiedDataFetch({
       )
 
       // Fetch consumption detail batch (2 years, or all local history)
-      updateConsumptionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 } })
+      updateConsumptionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 }, detailRange: { start: consumptionDetailStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
@@ -268,7 +268,7 @@ export function useUnifiedDataFetch({
       queryClient.invalidateQueries({ queryKey: ['productionDaily', productionPdlUsagePointId] })
 
       // Fetch production daily data (3 years, or all local history)
-      updateProductionStatus({ daily: 'loading' })
+      updateProductionStatus({ daily: 'loading', dailyRange: { start: productionDailyStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
@@ -295,7 +295,7 @@ export function useUnifiedDataFetch({
       )
 
       // Fetch production detail batch (2 years, or all local history)
-      updateProductionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 } })
+      updateProductionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 }, detailRange: { start: productionDetailStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
