@@ -63,4 +63,4 @@ kubectl exec -it -n {{ .Release.Namespace }} $(kubectl get pods -n {{ .Release.N
 3. For production, enable TLS in the ingress configuration
 4. Consider setting resource limits appropriate for your workload
 
-For more information, visit: https://github.com/MyElectricalData/myelectricaldata
+For more information, visit: https://github.com/MyElectricalData/myelectricaldata_new

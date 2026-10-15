@@ -21,8 +21,8 @@ helm version
 ### Étape 1 : Cloner le dépôt
 
 ```bash
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata/helm
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new/helm
 ```
 
 ### Étape 2 : Télécharger les dépendances

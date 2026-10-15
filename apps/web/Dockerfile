@@ -36,6 +36,8 @@ FROM nginx:alpine
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Dossier du proxy /api optionnel (rempli par entrypoint.sh si API_PROXY_URL est définie)
+RUN mkdir -p /etc/nginx/api-proxy
 
 # Copy built files from builder
 COPY --from=builder /app/dist /usr/share/nginx/html

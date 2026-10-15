@@ -35,12 +35,12 @@ import TabItem from '@theme/TabItem';
 
 ```bash
 # Cloner le repository
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer
-cp .env.local-client.example .env.local-client
-nano .env.local-client  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
+cp .env.local-client.example .env
+nano .env  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
 
 # Démarrer
 docker compose -f docker-compose.yml up -d

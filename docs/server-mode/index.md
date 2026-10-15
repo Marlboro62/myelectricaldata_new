@@ -112,8 +112,8 @@ Le **mode serveur** de MyElectricalData est la version complète de l'applicatio
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer les variables d'environnement
 cp apps/api/.env.example apps/api/.env.docker

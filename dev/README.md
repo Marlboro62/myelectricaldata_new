@@ -6,7 +6,7 @@ Ce dossier contient les fichiers Docker Compose pour le **développement local**
 
 | Fichier | Usage | Services inclus |
 |---------|-------|-----------------|
-| `docker-compose.yml` (racine) | **Production** | Backend, Frontend uniquement (images GHCR) |
+| `docker-compose.yml` (racine) | **Production** | PostgreSQL, Backend, Frontend (images GHCR, `.env` à la racine) |
 | `docker-compose.server.yml` (racine) | **Production** | Backend, Frontend uniquement (images GHCR) |
 | `dev/docker-compose.yml` | Développement | Backend, Frontend, PostgreSQL, VictoriaMetrics, pgAdmin |
 | `dev/docker-compose.server.yml` | Développement | Backend, Frontend, PostgreSQL, Valkey, pgAdmin, Docs |
@@ -68,6 +68,6 @@ Les fichiers `.env.*` sont attendus à la **racine du projet** :
 
 | Fichier | Mode | Description |
 |---------|------|-------------|
-| `.env.local-client` | Client dev | Configuration client développement |
+| `.env.local-client` | Client dev | Configuration client développement (la production lit `.env`) |
 | `.env.api` | Serveur dev | Configuration serveur développement |
 | `.env.web` | Serveur dev | Variables frontend serveur |
