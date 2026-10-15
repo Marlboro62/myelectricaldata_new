@@ -8,13 +8,13 @@ Couvre l'issue #115 :
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import httpx
+import pytest
 
 from src.adapters.myelectricaldata import MyElectricalDataAdapter, RateLimitExceededError
-from src.models.client_mode import AddressData, ContractData, ConsumptionData, DataGranularity, SyncStatus, SyncStatusType
+from src.models.client_mode import ConsumptionData, DataGranularity, SyncStatus, SyncStatusType
 from src.services.sync import SyncService, _next_midnight_utc
 
 PRM = "12345678901234"
@@ -83,7 +83,7 @@ async def test_sync_address_handles_none_and_unreadable_gracefully() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_energy_data_stops_and_sets_midnight_on_rate_limit() -> None:
-    service, db = make_service()
+    service, _db = make_service()
 
     sync_status = SyncStatus(
         usage_point_id=PRM,
@@ -97,16 +97,17 @@ async def test_sync_energy_data_stops_and_sets_midnight_on_rate_limit() -> None:
     async def mock_fetch(*args, **kwargs):
         raise RateLimitExceededError("Rate limit exceeded: 50/50 requests today")
 
-    synced = await service._sync_energy_data(
-        usage_point_id=PRM,
-        data_type="consumption",
-        granularity=DataGranularity.DAILY,
-        max_days=30,
-        fetch_func=mock_fetch,
-        model_class=ConsumptionData,
-    )
+    # Relancée après l'enregistrement du statut, pour que sync_pdl arrête les types suivants
+    with pytest.raises(RateLimitExceededError):
+        await service._sync_energy_data(
+            usage_point_id=PRM,
+            data_type="consumption",
+            granularity=DataGranularity.DAILY,
+            max_days=30,
+            fetch_func=mock_fetch,
+            model_class=ConsumptionData,
+        )
 
-    assert synced == 0
     assert sync_status.status == SyncStatusType.FAILED
     assert "Quota journalier atteint" in sync_status.error_message or "Rate limit" in sync_status.error_message
     assert sync_status.next_sync_at is not None
@@ -115,7 +116,7 @@ async def test_sync_energy_data_stops_and_sets_midnight_on_rate_limit() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_all_reports_success_false_when_pdl_rate_limited() -> None:
-    service, db = make_service()
+    service, _db = make_service()
     service.adapter.get_usage_points = AsyncMock(return_value={"usage_points": [{"usage_point_id": PRM}]})
 
     service.sync_pdl = AsyncMock(return_value={

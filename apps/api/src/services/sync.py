@@ -191,7 +191,7 @@ class SyncService:
                     pdl_errors = [
                         f"{dtype}: {res}"
                         for dtype, res in result.items()
-                        if dtype != "usage_point_id" and isinstance(res, str) and (res.startswith("error:") or res.startswith("rate_limited:"))
+                        if dtype != "usage_point_id" and isinstance(res, str) and res.startswith(("error:", "rate_limited:"))
                     ]
                     if pdl_errors:
                         results["errors"].append({"pdl": usage_point_id, "error": "; ".join(pdl_errors)})
@@ -593,12 +593,11 @@ class SyncService:
         await self.db.commit()
 
         total_synced = 0
-        rate_limited = False
-        rate_limit_msg = None
+        rate_limit_error: RateLimitExceededError | None = None
         errors: list[str] = []
 
         for range_start, range_end in missing_ranges:
-            if rate_limited:
+            if rate_limit_error:
                 break
             current_start = range_start
             while current_start < range_end:
@@ -614,8 +613,7 @@ class SyncService:
                 except RateLimitExceededError as e:
                     await self.db.rollback()
                     await self.db.refresh(sync_status)
-                    rate_limited = True
-                    rate_limit_msg = str(e)
+                    rate_limit_error = e
                     logger.warning(
                         f"[SYNC] Quota Enedis/passerelle atteint pour {usage_point_id} (max_power) : {e}. "
                         "Reprise programmée après minuit UTC."
@@ -632,9 +630,9 @@ class SyncService:
                     errors.append(str(e))
                 current_start = current_end
 
-        if rate_limited:
+        if rate_limit_error:
             sync_status.status = SyncStatusType.FAILED if total_synced == 0 else SyncStatusType.PARTIAL
-            sync_status.error_message = rate_limit_msg or "Quota journalier atteint (HTTP 429), reprise après minuit UTC"
+            sync_status.error_message = str(rate_limit_error)
             sync_status.next_sync_at = _next_midnight_utc()
         else:
             sync_status.status = SyncStatusType.PARTIAL if errors else SyncStatusType.SUCCESS
@@ -654,6 +652,9 @@ class SyncService:
         await self.db.commit()
 
         logger.info(f"[SYNC] max_power pour {usage_point_id}: {total_synced} jours synchronisés")
+        if rate_limit_error:
+            # sync_pdl arrête alors les types suivants du PDL
+            raise rate_limit_error
         return total_synced
 
     async def _sync_energy_data(
@@ -719,14 +720,13 @@ class SyncService:
 
         total_synced = 0
         errors = []
-        rate_limited = False
-        rate_limit_msg = None
+        rate_limit_error: RateLimitExceededError | None = None
 
         try:
             chunk_size = 7 if granularity == DataGranularity.DETAILED else 365
 
             for range_start, range_end in missing_ranges:
-                if rate_limited:
+                if rate_limit_error:
                     break
                 # Découper chaque plage manquante en chunks compatibles API
                 current_start = range_start
@@ -761,8 +761,7 @@ class SyncService:
 
                     except RateLimitExceededError as e:
                         await self.db.rollback()
-                        rate_limited = True
-                        rate_limit_msg = str(e)
+                        rate_limit_error = e
                         logger.warning(
                             f"[SYNC] Quota Enedis/passerelle atteint pour {usage_point_id} "
                             f"({data_type}/{granularity.value}) : {e}. Reprise programmée après minuit UTC."
@@ -780,9 +779,9 @@ class SyncService:
                     current_start = current_end
 
             # Update sync status
-            if rate_limited:
+            if rate_limit_error:
                 sync_status.status = SyncStatusType.FAILED if total_synced == 0 else SyncStatusType.PARTIAL
-                sync_status.error_message = rate_limit_msg or "Quota journalier atteint (HTTP 429), reprise après minuit UTC"
+                sync_status.error_message = str(rate_limit_error)
                 sync_status.next_sync_at = _next_midnight_utc()
             elif errors:
                 sync_status.status = SyncStatusType.PARTIAL
@@ -825,6 +824,9 @@ class SyncService:
             await self.db.commit()
             raise
 
+        if rate_limit_error:
+            # Relancée hors du try : le statut est déjà enregistré, sync_pdl arrête les types suivants
+            raise rate_limit_error
         return total_synced
 
     def _parse_meter_reading(

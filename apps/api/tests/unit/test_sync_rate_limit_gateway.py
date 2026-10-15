@@ -59,6 +59,19 @@ async def test_adapter_keeps_other_gateway_errors_as_responses() -> None:
 
 
 @pytest.mark.asyncio
+async def test_adapter_keeps_partial_cached_data_served_at_quota() -> None:
+    """PARTIAL_DATA porte le cache partiel servi au quota : à enregistrer, pas à jeter."""
+    body = {
+        "success": True,
+        "data": {"interval_reading": []},
+        "error": {"code": "PARTIAL_DATA", "message": "Rate limit exceeded. Returning cached data only."},
+    }
+    adapter = make_adapter(200, body)
+
+    assert await adapter._make_request("GET", f"/enedis/consumption/detail/{PRM}") == body
+
+
+@pytest.mark.asyncio
 async def test_sync_pdl_stops_every_data_type_after_first_quota() -> None:
     db = MagicMock()
     exec_result = MagicMock()
