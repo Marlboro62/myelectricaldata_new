@@ -45,3 +45,22 @@ export function formatHistoryDepth(start: string, end: string): string {
   }
   return `${Math.max(1, Math.round(days / 30.44))} mois`
 }
+
+/**
+ * Années glissantes, de la plus récente à la plus ancienne, jusqu'à couvrir `oldest` : autant que
+ * l'historique en contient, sans plafond. Pas d'un an calendaire (pas de 365 jours, qui dérivent
+ * d'un jour par année bissextile et finissent par donner deux périodes de même année de fin).
+ * Bornes incluses et disjointes : chaque période commence juste après la fin de la précédente.
+ */
+export function rollingYearPeriods(mostRecent: Date, oldest: Date): Array<{ start: Date; end: Date }> {
+  const yearsBack = (years: number) => {
+    const date = new Date(mostRecent)
+    date.setFullYear(mostRecent.getFullYear() - years)
+    return date
+  }
+  const periods: Array<{ start: Date; end: Date }> = []
+  for (let i = 0; i === 0 || yearsBack(i) >= oldest; i++) {
+    periods.push({ start: new Date(yearsBack(i + 1).getTime() + 1), end: yearsBack(i) })
+  }
+  return periods
+}

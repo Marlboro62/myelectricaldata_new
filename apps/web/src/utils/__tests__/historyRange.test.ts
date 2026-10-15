@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { historyStartDate, oldestLocalDate, formatHistoryDepth } from '../historyRange'
+import { historyStartDate, oldestLocalDate, formatHistoryDepth, rollingYearPeriods } from '../historyRange'
 
 // MED-64 : l'historique demandé part de la donnée locale la plus ancienne, jamais moins que la fenêtre Enedis
 describe('historyStartDate', () => {
@@ -58,5 +58,29 @@ describe('formatHistoryDepth', () => {
   it('moins d\'un an : en mois', () => {
     expect(formatHistoryDepth('2026-02-15', '2026-10-15')).toBe('8 mois')
     expect(formatHistoryDepth('2026-10-01', '2026-10-15')).toBe('1 mois')
+  })
+})
+
+describe('rollingYearPeriods', () => {
+  it('autant de périodes que l historique en contient, de la plus récente à la plus ancienne', () => {
+    const periods = rollingYearPeriods(new Date('2026-10-14'), new Date('2020-10-16'))
+
+    expect(periods.map((p) => p.end.getFullYear())).toEqual([2026, 2025, 2024, 2023, 2022, 2021])
+  })
+
+  it('une seule période quand l historique tient dans l année', () => {
+    expect(rollingYearPeriods(new Date('2026-10-14'), new Date('2026-03-01'))).toHaveLength(1)
+  })
+
+  it('bornes disjointes et contiguës : aucun jour compté deux fois', () => {
+    const periods = rollingYearPeriods(new Date('2026-10-14'), new Date('2022-01-01'))
+
+    periods.slice(1).forEach((p, i) => expect(periods[i].start.getTime() - p.end.getTime()).toBe(1))
+  })
+
+  it('fin au 31 décembre après une année bissextile : années de fin toutes distinctes', () => {
+    const years = rollingYearPeriods(new Date(2026, 11, 31), new Date(2019, 0, 1)).map((p) => p.end.getFullYear())
+
+    expect(new Set(years).size).toBe(years.length)
   })
 })
