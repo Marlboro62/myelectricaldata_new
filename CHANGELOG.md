@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.5](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.4...2.5.5) (2026-10-15)
+
+### Bug Fixes
+
+* **api:** resolve static dir and pyproject.toml relative to the package ([5b56f3c](https://github.com/MyElectricalData/myelectricaldata_new/commit/5b56f3c40d5e623d36b1b7005fa66e689812f679))
+* **web:** resolve SSE export URLs from runtime API base URL ([e5699ae](https://github.com/MyElectricalData/myelectricaldata_new/commit/e5699aed5fcd992d3ff2bffabe4cbfd0705d3460))
+
 ## [2.5.4](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.3...2.5.4) (2026-10-15)
 
 ### Bug Fixes
