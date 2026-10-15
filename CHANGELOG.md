@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.7.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.0...2.7.1) (2026-10-15)
+
+### Bug Fixes
+
+* **web:** MED-63 / appliquer les correctifs Alpine sur l'image nginx (CVE-2026-85091) ([f1ca8b5](https://github.com/MyElectricalData/myelectricaldata_new/commit/f1ca8b590db46d128908a1fca1508fd3491210f2))
+
 ## [2.7.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.1...2.7.0) (2026-10-15)
 
 ### Features
