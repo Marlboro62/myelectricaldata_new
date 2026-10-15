@@ -326,6 +326,16 @@ async def test_detail_jour_recent_partiel_servi_si_enedis_echoue(enedis, cache):
     assert len(points_of(data)) == 2 * 48 + 30
 
 
+async def test_detail_jour_recent_partiel_servi_si_enedis_renvoie_vide(enedis, cache):
+    enedis.partial = {j(1)}
+    await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    enedis.holes = {j(1)}  # Enedis répond sans erreur mais sans aucun point pour J-1
+    data = await call(router.get_consumption_detail, j(3), j(0), use_cache=True)
+
+    assert len(points_of(data)) == 2 * 48 + 30
+
+
 async def test_detail_partage_le_cache_jour_du_batch(enedis, cache):
     await call(router.get_consumption_detail_batch, j(6), j(3), use_cache=True)
 
@@ -674,6 +684,16 @@ async def test_production_detail_jour_recent_partiel_servi_si_enedis_echoue(ened
     await call(router.get_production_detail, j(3), j(0), use_cache=True)
 
     enedis.failing = True
+    data = await call(router.get_production_detail, j(3), j(0), use_cache=True)
+
+    assert len(points_of(data)) == 2 * 48 + 30
+
+
+async def test_production_detail_jour_recent_partiel_servi_si_enedis_renvoie_vide(enedis, cache):
+    enedis.partial = {j(1)}
+    await call(router.get_production_detail, j(3), j(0), use_cache=True)
+
+    enedis.holes = {j(1)}  # Enedis répond sans erreur mais sans aucun point pour J-1
     data = await call(router.get_production_detail, j(3), j(0), use_cache=True)
 
     assert len(points_of(data)) == 2 * 48 + 30

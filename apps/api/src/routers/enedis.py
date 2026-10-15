@@ -998,11 +998,11 @@ async def get_consumption_detail(
 
                 # Extract readings (points 2026)
                 readings = extract_points(data)
+                readings_by_date: dict[str, list[dict[str, Any]]] = {}
+                for reading in readings:
+                    readings_by_date.setdefault(reading.get("d", "")[:10], []).append(reading)
 
                 if use_cache:
-                    readings_by_date: dict[str, list[dict[str, Any]]] = {}
-                    for reading in readings:
-                        readings_by_date.setdefault(reading.get("d", "")[:10], []).append(reading)
                     for date_str, day_readings in readings_by_date.items():
                         interval_length = day_readings[0].get("p") or "PT30M"
                         cache_data = {
@@ -1016,6 +1016,10 @@ async def get_consumption_detail(
                     log_with_pdl("info", usage_point_id, f"[CACHE SET] {range_start} to {range_end} ({len(readings)} readings in {len(readings_by_date)} days)")
 
                 all_readings.extend(readings)
+                # Jour récent partiel absent de la réponse (Enedis sans erreur mais sans point) : servir le cache
+                for date_str in days_between(range_start, range_end):
+                    if date_str not in readings_by_date:
+                        all_readings.extend(partial_days.get(date_str, []))
 
             except Exception as e:
                 log_with_pdl("error", usage_point_id, f"[ERROR] Failed to fetch {range_start}-{range_end}: {e}")
@@ -1762,6 +1766,8 @@ async def get_production_detail(
                 points.extend(day_readings)
             elif not is_recent_day(date_str, today):
                 await cache_service.set(cache_key, EMPTY_DAY, encryption_key)
+            else:
+                points.extend(partial_days.get(date_str, []))  # jour récent sans point : garder le partiel en cache
 
     if api_errors and not points:
         return APIResponse(success=False, error=ErrorDetail(code="ENEDIS_ERROR", message="; ".join(api_errors)))
