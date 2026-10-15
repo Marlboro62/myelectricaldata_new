@@ -81,3 +81,12 @@ def test_release_met_a_jour_seulement_la_version_racine_de_uv_lock(releaserc: di
     changed = [(a, b) for a, b in zip(lock.splitlines(), updated.splitlines()) if a != b]
     assert len(updated.splitlines()) == len(lock.splitlines())
     assert changed == [(f'version = "{lock_root_version(lock)}"', 'version = "9.9.9"')]
+
+
+def test_release_echoue_si_la_regle_uv_lock_ne_trouve_rien(releaserc: dict) -> None:
+    """Avec `results`, semantic-release-replace-plugin lève une erreur si le remplacement diffère de l'attendu."""
+    replacements = plugin_options(releaserc, "semantic-release-replace-plugin")["replacements"]
+    rule = next(r for r in replacements if UV_LOCK in r["files"])
+
+    assert rule.get("countMatches") is True
+    assert rule.get("results") == [{"file": UV_LOCK, "hasChanged": True, "numMatches": 1, "numReplacements": 1}]

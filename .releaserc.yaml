@@ -89,12 +89,18 @@ plugins:
           from: '^version = ".*"'
           to: 'version = "${nextRelease.version}"'
           countMatches: true
-        # Backend uv.lock: root package version only (lookbehind keeps `to` free of '\n')
+        # Backend uv.lock: root package version only (lookbehind keeps `to` free of '\n';
+        # `results` makes the release fail if the lock is not updated, instead of drifting silently)
         - files:
             - apps/api/uv.lock
           from: '(?<=^name = "myelectricaldata-api"\nversion = ")[^"]*'
           to: '${nextRelease.version}'
           countMatches: true
+          results:
+            - file: apps/api/uv.lock
+              hasChanged: true
+              numMatches: 1
+              numReplacements: 1
 
   # Commit version changes
   - - '@semantic-release/git'
