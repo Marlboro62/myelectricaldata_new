@@ -46,7 +46,8 @@ MED_CLIENT_ID=cli_xxxxxxxxxxxxxxxxxxxxxxxxx
 MED_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # === RECOMMANDÉ (avant le premier démarrage) ===
-# Mot de passe de la base PostgreSQL embarquée
+# Mot de passe de la base PostgreSQL embarquée : lettres, chiffres, - _ . ~ seulement
+# (il est repris tel quel dans l'URL de connexion, un @ / : # ? la casserait)
 POSTGRES_PASSWORD=un-mot-de-passe-solide
 # Clé de signature des sessions, à générer :
 #   python3 -c "import secrets; print(secrets.token_urlsafe(32))"

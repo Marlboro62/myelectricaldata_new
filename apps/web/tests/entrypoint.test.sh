@@ -16,7 +16,7 @@ echo '<html>spa</html>' > "$HTML/index.html"
 FAIL=0
 
 cleanup() {
-  $DOCKER rm -f med-front-$$ med-back-$$ >/dev/null 2>&1
+  $DOCKER rm -f med-front-$$ med-back-$$ med-squat-$$ >/dev/null 2>&1
   $DOCKER network rm $NET >/dev/null 2>&1
   rm -rf "$HTML"
 }
@@ -25,10 +25,14 @@ trap cleanup EXIT
 ok() { echo "ok   $1"; }
 ko() { echo "FAIL $1"; FAIL=1; }
 
-$DOCKER network create $NET >/dev/null
-$DOCKER run -d --name med-back-$$ --network $NET --network-alias backend nginx:alpine sh -c '
-  printf "server { listen 8000; location / { default_type text/plain; return 200 \"backend \$request_method \$request_uri \$http_host\"; } }\n" > /etc/nginx/conf.d/default.conf
-  exec nginx -g "daemon off;"' >/dev/null
+$DOCKER network create --subnet 172.31.252.0/24 $NET >/dev/null
+
+start_back() {
+  $DOCKER run -d --name med-back-$$ --network $NET --network-alias backend nginx:alpine sh -c '
+    printf "server { listen 8000; location / { default_type text/plain; return 200 \"backend \$request_method \$request_uri \$http_host\"; } }\n" > /etc/nginx/conf.d/default.conf
+    exec nginx -g "daemon off;"' >/dev/null
+}
+start_back
 
 # Requête depuis le conteneur du front (wget de busybox) : pas de port publié,
 # le relais de ports de Rancher Desktop ne suit pas les réseaux dédiés
@@ -68,6 +72,18 @@ if start_front -e API_PROXY_URL=http://backend:8000; then
   case "$body" in "backend POST /api/accounts/auto-login "*) ok "POST /api transmis (plus de 405)";; *) ko "POST /api = '$body'";; esac
   body=$(req /dashboard)
   [ "$body" = '<html>spa</html>' ] && ok "les routes de la SPA restent servies" || ko "/dashboard = '$body'"
+
+  # Backend recréé avec une autre IP (docker compose up -d backend) : nginx doit résoudre à nouveau
+  old_ip=$($DOCKER inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' med-back-$$)
+  $DOCKER rm -f med-back-$$ >/dev/null
+  $DOCKER run -d --name med-squat-$$ --network $NET --ip "$old_ip" nginx:alpine >/dev/null 2>&1 \
+    || $DOCKER run -d --name med-squat-$$ --network $NET nginx:alpine >/dev/null
+  start_back
+  new_ip=$($DOCKER inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' med-back-$$)
+  sleep 1
+  body=$(req /api/ping)
+  [ "$body" = "backend GET /api/ping 127.0.0.1" ] && ok "backend recréé ($old_ip -> $new_ip) toujours joint" || ko "backend recréé ($old_ip -> $new_ip) : /api/ping = '$body'"
+  $DOCKER rm -f med-squat-$$ >/dev/null 2>&1
 else
   ko "avec API_PROXY_URL, le front ne démarre pas"
 fi

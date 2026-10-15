@@ -23,6 +23,7 @@ services:
     environment:
       - POSTGRES_DB=myelectricaldata_client
       - POSTGRES_USER=myelectricaldata
+      # Lettres, chiffres, - _ . ~ seulement : il est repris tel quel dans DATABASE_URL
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-myelectricaldata}
     volumes:
       - postgres_data:/var/lib/postgresql/data

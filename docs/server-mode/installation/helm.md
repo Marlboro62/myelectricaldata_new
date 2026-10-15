@@ -29,7 +29,7 @@ helm version
 
 ```bash
 git clone https://github.com/MyElectricalData/myelectricaldata_new.git
-cd myelectricaldata/helm
+cd myelectricaldata_new/helm
 ```
 
 ### Étape 2 : Télécharger les dépendances
