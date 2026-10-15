@@ -26,6 +26,36 @@ EOF
 # Make env.js readable by nginx
 chmod 644 /usr/share/nginx/html/env.js
 
+# Proxy /api vers le backend, seulement si API_PROXY_URL est définie (Docker Compose).
+# Sous Helm, l'ingress route déjà /api : la variable reste vide et rien n'est ajouté.
+# /api est transmis tel quel, comme par l'ingress (le backend a root_path="/api").
+API_PROXY_CONF_DIR=/etc/nginx/api-proxy
+mkdir -p "$API_PROXY_CONF_DIR"
+rm -f "$API_PROXY_CONF_DIR/api.conf"
+if [ -n "${API_PROXY_URL:-}" ]; then
+  # Schéma, hôte et port seulement : la valeur est écrite telle quelle dans la conf nginx
+  if ! printf '%s' "$API_PROXY_URL" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]{1,5})?/?$'; then
+    echo "API_PROXY_URL invalide : '$API_PROXY_URL' (attendu : http://hote:port, ex. http://backend:8000)" >&2
+    exit 1
+  fi
+  cat <<EOF > "$API_PROXY_CONF_DIR/api.conf"
+location /api/ {
+    proxy_pass ${API_PROXY_URL%/};
+    proxy_http_version 1.1;
+    proxy_set_header Host \$http_host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Connection "";
+    # Export en SSE : pas de mise en tampon, flux longs
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    client_max_body_size 10m;
+}
+EOF
+  echo "Proxy /api -> ${API_PROXY_URL%/}"
+fi
+
 echo "Generated /usr/share/nginx/html/env.js with:"
 cat /usr/share/nginx/html/env.js
 

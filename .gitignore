@@ -80,3 +80,6 @@ tmp/
 # Git worktrees (Crystal)
 /worktrees/
 /worktree-*/
+
+# Dossiers temporaires de apps/web/tests/entrypoint.test.sh
+.entrypoint-test.*
