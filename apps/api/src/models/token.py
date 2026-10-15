@@ -2,9 +2,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, ForeignKey, DateTime, Text, UniqueConstraint
+from sqlalchemy import String, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, TZDateTime
 
 if TYPE_CHECKING:
     from .user import User
@@ -23,7 +23,7 @@ class Token(Base, TimestampMixin):
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TZDateTime(), nullable=False)
     scope: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relations

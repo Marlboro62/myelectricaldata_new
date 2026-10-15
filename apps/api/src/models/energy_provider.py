@@ -1,9 +1,9 @@
-from sqlalchemy import String, Boolean, DateTime, Text, JSON, ForeignKey, Numeric
+from sqlalchemy import String, Boolean, Text, JSON, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, UTC
 from decimal import Decimal
 import uuid
-from .base import Base
+from .base import Base, TZDateTime
 
 
 # NOTE: La classe PricingType a été supprimée.
@@ -23,9 +23,9 @@ class EnergyProvider(Base):
     website: Mapped[str | None] = mapped_column(String(512), nullable=True)
     scraper_urls: Mapped[list | None] = mapped_column(JSON, nullable=True)  # List of URLs used by the scraper
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=lambda: datetime.now(UTC), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+        TZDateTime(), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
     )
 
 
@@ -79,19 +79,19 @@ class EnergyOffer(Base):
     power_kva: Mapped[int | None] = mapped_column(nullable=True)  # 3, 6, 9, 12, 15, 18, 24, 30, 36 kVA
 
     # Price update tracking
-    price_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    price_updated_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     # Validity period for tariff history
-    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # Date from which this tariff is valid
-    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # Date until which this tariff is valid (NULL = current)
+    valid_from: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)  # Date from which this tariff is valid
+    valid_to: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)  # Date until which this tariff is valid (NULL = current)
 
     # Link to offer page
     offer_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)  # URL to the offer page on provider's website
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=lambda: datetime.now(UTC), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+        TZDateTime(), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
     )
 
 
@@ -137,14 +137,14 @@ class OfferContribution(Base):
     screenshot_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)  # Screenshot de la fiche des prix (optionnel)
 
     # Offer validity date (date de mise en service de l'offre)
-    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # Date from which this tariff is valid
+    valid_from: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)  # Date from which this tariff is valid
 
     # Admin review
     reviewed_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=lambda: datetime.now(UTC), nullable=False)
 
 
 class ContributionMessage(Base):
@@ -158,4 +158,4 @@ class ContributionMessage(Base):
     message_type: Mapped[str] = mapped_column(String(50), nullable=False)  # info_request, contributor_response
     content: Mapped[str] = mapped_column(Text, nullable=False)
     is_from_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime(), default=lambda: datetime.now(UTC), nullable=False)
