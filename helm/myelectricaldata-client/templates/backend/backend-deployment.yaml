@@ -13,6 +13,9 @@ spec:
   {{- if or .Values.autoscaling.enabled (gt (int .Values.backend.replicaCount) 1) }}
   {{- fail "SQLite mode (postgres.enabled=false, no externalDatabase) supports a single backend replica" }}
   {{- end }}
+  {{- if not .Values.backend.persistence.enabled }}
+  {{- fail "SQLite mode (postgres.enabled=false, no externalDatabase) needs backend.persistence.enabled: the database would be lost on every pod restart" }}
+  {{- end }}
   # SQLite: one writer on a ReadWriteOnce volume, the old pod stops before the new one starts
   strategy:
     type: Recreate
