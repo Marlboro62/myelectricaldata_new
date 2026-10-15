@@ -1,0 +1,93 @@
+"""Quota de la passerelle tel qu'elle le renvoie réellement (issue #115, revue de la PR #137).
+
+Sur /api/enedis/*, la passerelle ne répond pas 429 : `check_rate_limit` (routers/enedis.py)
+renvoie un HTTP 200 dont le corps porte `success: false` et le code RATE_LIMIT_EXCEEDED.
+Et un quota atteint sur un type de données doit arrêter la synchro du PDL entier,
+pas seulement la boucle de ce type.
+"""
+
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from src.adapters.myelectricaldata import MyElectricalDataAdapter, RateLimitExceededError
+from src.models.client_mode import SyncStatus, SyncStatusType
+from src.services.sync import SyncService
+
+PRM = "12345678901234"
+
+# Corps exact de check_rate_limit (routers/enedis.py), servi en HTTP 200
+QUOTA_BODY = {
+    "success": False,
+    "data": None,
+    "error": {
+        "code": "RATE_LIMIT_EXCEEDED",
+        "message": "Daily rate limit exceeded (50/50). Use cache to increase limit.",
+    },
+}
+
+
+def make_adapter(status_code: int, body: dict) -> MyElectricalDataAdapter:
+    adapter = MyElectricalDataAdapter()
+    adapter._ensure_authenticated = AsyncMock(return_value="token")
+    response = MagicMock()
+    response.status_code = status_code
+    response.json.return_value = body
+    response.raise_for_status = MagicMock()
+    client = AsyncMock()
+    client.request = AsyncMock(return_value=response)
+    adapter.get_client = AsyncMock(return_value=client)
+    return adapter
+
+
+@pytest.mark.asyncio
+async def test_adapter_detects_quota_served_as_http_200() -> None:
+    adapter = make_adapter(200, QUOTA_BODY)
+
+    with pytest.raises(RateLimitExceededError):
+        await adapter._make_request("GET", f"/enedis/consumption/daily/{PRM}")
+
+
+@pytest.mark.asyncio
+async def test_adapter_keeps_other_gateway_errors_as_responses() -> None:
+    """Un refus qui n'est pas un quota (PDL inconnu…) reste une réponse, sans exception."""
+    body = {"success": False, "data": None, "error": {"code": "PDL_NOT_FOUND", "message": "x"}}
+    adapter = make_adapter(200, body)
+
+    assert await adapter._make_request("GET", f"/enedis/consumption/daily/{PRM}") == body
+
+
+@pytest.mark.asyncio
+async def test_sync_pdl_stops_every_data_type_after_first_quota() -> None:
+    db = MagicMock()
+    exec_result = MagicMock()
+    exec_result.scalar_one_or_none.return_value = None  # PDL absent : actif par défaut, sans production
+    exec_result.fetchall.return_value = []
+    db.execute = AsyncMock(return_value=exec_result)
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    db.refresh = AsyncMock()
+
+    service = SyncService.__new__(SyncService)
+    service.db = db
+    service.adapter = MagicMock()
+    service._should_refresh_metadata = AsyncMock(return_value=False)
+    service._daily_upsert_is_effective = AsyncMock(return_value=False)
+    service._find_missing_ranges = AsyncMock(return_value=[(date(2026, 1, 1), date(2026, 1, 3))])
+    service._get_or_create_sync_status = AsyncMock(
+        side_effect=lambda upid, dtype, gran: SyncStatus(
+            usage_point_id=upid, data_type=dtype, granularity=gran, status=SyncStatusType.PENDING
+        )
+    )
+    service.adapter.get_consumption_daily = AsyncMock(side_effect=RateLimitExceededError("quota"))
+    service.adapter.get_consumption_detail = AsyncMock(return_value={"success": True, "data": None})
+    service.adapter.get_consumption_max_power = AsyncMock(return_value={"success": True, "data": None})
+
+    result = await service.sync_pdl(PRM)
+
+    assert result["consumption_daily"].startswith("rate_limited")
+    service.adapter.get_consumption_detail.assert_not_called()
+    service.adapter.get_consumption_max_power.assert_not_called()
+    assert result["consumption_detail"] == "skipped (rate limited)"
+    assert result["max_power"] == "skipped (rate limited)"
