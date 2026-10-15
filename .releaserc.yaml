@@ -89,6 +89,12 @@ plugins:
           from: '^version = ".*"'
           to: 'version = "${nextRelease.version}"'
           countMatches: true
+        # Backend uv.lock: root package version only (lookbehind keeps `to` free of '\n')
+        - files:
+            - apps/api/uv.lock
+          from: '(?<=^name = "myelectricaldata-api"\nversion = ")[^"]*'
+          to: '${nextRelease.version}'
+          countMatches: true
 
   # Commit version changes
   - - '@semantic-release/git'
@@ -97,6 +103,7 @@ plugins:
         - package.json
         - apps/web/package.json
         - apps/api/pyproject.toml
+        - apps/api/uv.lock
       message: 'chore(release): ${nextRelease.version} [skip ci]'
 
   # Create GitHub release
