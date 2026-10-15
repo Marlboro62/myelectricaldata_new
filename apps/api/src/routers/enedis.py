@@ -204,6 +204,9 @@ RECENT_DAYS = 2  # J-1 et J-2
 RECENT_TTL_SECONDS = 3 * 3600
 EMPTY_DAY = {"empty": True}  # marqueur de cache : jour ancien sans mesure chez Enedis
 REJECTED_DAY_TTL_SECONDS = 7 * 86400  # jour ancien refusé en 400 : redemandé une fois par semaine
+# Refus 400 qui disent qu'une période n'est pas disponible (et non que la demande est mal autorisée,
+# comme ADAM-ERR0061) : aucun service souscrit pour la période, date de début avant la limite d'historique
+PERIOD_REJECTION_CODES = {"ADAM-ERR0191", "ADAM-DC-0016"}
 EXPECTED_READINGS = {"PT10M": 144, "PT15M": 96, "PT30M": 48, "PT60M": 24}  # points par jour selon le pas de la courbe
 
 # Cache passerelle par défaut (MED-43) : un appelant qui n'envoie pas use_cache (conteneur local <= 2.1.x,
@@ -271,6 +274,20 @@ def enedis_rejected_range(error: BaseException, api_end: str, today: datetime) -
     return None
 
 
+def enedis_error_code(error: BaseException) -> str | None:
+    """Code Enedis (`error` du corps JSON) du refus HTTP levé tel quel ou en cause du ValueError de l'adaptateur."""
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, httpx.HTTPStatusError):
+            try:
+                body = current.response.json()
+            except ValueError:
+                return None
+            return str(body["error"]) if isinstance(body, dict) and body.get("error") else None
+        current = current.__cause__
+    return None
+
+
 def range_error_key(key_prefix: str, usage_point_id: str, start: str, end: str) -> str:
     """Cache négatif d'une plage rejetée par Enedis (ADAM-ERR0123, refus 400), valable pour cette plage EXACTE.
 
@@ -307,30 +324,37 @@ async def remember_rejected_range(
     usage_point_id: str,
     api_start: str,
     api_end: str,
-    rejected: str,
+    error: BaseException,
     fetch: Callable[[str, str], Awaitable[Any]],
     encryption_key: str,
 ) -> None:
-    """Mémorise le refus 400 d'une plage ancienne (`rejected`, rendu par enedis_rejected_range).
+    """Mémorise le refus 400 d'une plage ancienne (`error`, reconnu par enedis_rejected_range).
 
     Un conteneur local recalcule ses fenêtres chaque jour depuis J-731 : décalées d'un jour, elles ne
     retombent jamais sur la plage exacte de la veille. Les jours refusés sont donc marqués un par un.
     Mais le refus porte sur la plage entière, et une fenêtre à cheval sur la mise en service est refusée
     alors que ses derniers jours sont valides : le dernier jour est redemandé seul. Refusé lui aussi, le
     refus tient à une date de début trop ancienne et vaut pour tous les jours de la plage ; accepté (ou
-    autre erreur), seule la plage exacte est mémorisée, sans masquer de jour valide.
+    autre erreur), seule la plage exacte est mémorisée, sans masquer de jour valide. Un refus qui ne
+    porte pas sur la période (PERIOD_REJECTION_CODES) n'est mémorisé que pour la plage exacte : il peut
+    tomber dès que l'autorisation est corrigée.
     """
+    rejected = str(error)
     days = days_between(api_start, api_end)
-    if len(days) > 1:
+    period_rejected = enedis_error_code(error) in PERIOD_REJECTION_CODES
+    if period_rejected and len(days) > 1:
         try:
             await fetch(days[-1], api_end)
-            probe_rejected = False
+            period_rejected = False
         except Exception as e:
-            probe_rejected = enedis_rejected_range(e, api_end, paris_today()) is not None
-        if not probe_rejected:
-            error_key = range_error_key(key_prefix, usage_point_id, api_start, api_end)
-            await cache_service.set(error_key, {"error": rejected}, encryption_key)
-            return
+            period_rejected = (
+                enedis_rejected_range(e, api_end, paris_today()) is not None
+                and enedis_error_code(e) in PERIOD_REJECTION_CODES
+            )
+    if not period_rejected:
+        error_key = range_error_key(key_prefix, usage_point_id, api_start, api_end)
+        await cache_service.set(error_key, {"error": rejected}, encryption_key)
+        return
     for day in days:
         day_key = rejected_day_key(key_prefix, usage_point_id, day)
         await cache_service.set(day_key, {"error": rejected}, encryption_key, ttl=REJECTED_DAY_TTL_SECONDS)
@@ -375,10 +399,8 @@ async def cached_daily_points(
         except Exception as e:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] {key_prefix} {api_start} to {api_end}: {e}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {e}")
-            if rejected := enedis_rejected_range(e, api_end, today):
-                await remember_rejected_range(
-                    key_prefix, usage_point_id, api_start, api_end, rejected, fetch, encryption_key
-                )
+            if enedis_rejected_range(e, api_end, today):
+                await remember_rejected_range(key_prefix, usage_point_id, api_start, api_end, e, fetch, encryption_key)
             continue
         if error := enedis_business_error(data):
             log_with_pdl("warning", usage_point_id, f"[ENEDIS ERROR] {key_prefix} {api_start} to {api_end}: {error}")
@@ -1799,13 +1821,13 @@ async def get_production_detail(
                     await cache_service.set(error_key, {"error": error}, encryption_key)
             except Exception as e:
                 error = str(e)
-                if rejected := enedis_rejected_range(e, api_end, today):
+                if enedis_rejected_range(e, api_end, today):
                     await remember_rejected_range(
                         "production:detail:daily",
                         usage_point_id,
                         api_start,
                         api_end,
-                        rejected,
+                        e,
                         lambda probe_start, probe_end: adapter.get_production_detail(
                             usage_point_id, probe_start, probe_end, secret
                         ),

@@ -38,11 +38,11 @@ def days(start: str, end: str) -> list[str]:
     return out
 
 
-def enedis_http_error(status: int, as_value_error: bool) -> Exception:
+def enedis_http_error(status: int, as_value_error: bool, code: str = "ADAM-ERR0191") -> Exception:
     """Refus HTTP d'Enedis tel que le lève l'adaptateur : ValueError « code: description » chaînée au
     HTTPStatusError quand le corps porte `error`, HTTPStatusError brut sinon."""
     request = httpx.Request("GET", "https://gw.ext.prod.api.enedis.fr/mesure_synchrone_auto/v2/courbe_de_charge_production")
-    body = {"error": "Bad Request" if status == 400 else "Error", "error_description": "refus Enedis"}
+    body = {"error": code if status == 400 else "Error", "error_description": "refus Enedis"}
     response = httpx.Response(status, request=request, json=body)
     cause = httpx.HTTPStatusError(f"Client error '{status}'", request=request, response=response)
     if not as_value_error:
@@ -70,13 +70,14 @@ class FakeEnedis:
         self.rejected_before: str | None = None
         self.rejected_status = 400
         self.rejected_as_value_error = True
+        self.rejected_code = "ADAM-ERR0191"  # aucun service souscrit pour la période demandée
 
     def _days(self, kind: str, start: str, end: str) -> list[str]:
         self.calls.append((kind, start, end))
         if self.failing:
             raise RuntimeError("503 Service Unavailable")
         if self.rejected_before and start < self.rejected_before:
-            raise enedis_http_error(self.rejected_status, self.rejected_as_value_error)
+            raise enedis_http_error(self.rejected_status, self.rejected_as_value_error, self.rejected_code)
         if start >= end:
             raise RuntimeError(f"ADAM-ERR0069 dateDebut {start} >= dateFin {end}")
         last = date.fromisoformat(j(self.published_until))
@@ -684,6 +685,45 @@ async def test_refus_400_fenetre_glissante_servie_par_les_jours_refuses(enedis, 
 
     assert enedis.calls == []
     assert not shifted.success
+
+
+@RANGE_CACHE
+@pytest.mark.parametrize("as_value_error", [True, False])
+async def test_refus_400_hors_periode_memorise_pour_la_plage_exacte_seulement(
+    enedis, cache, handler, kind, as_value_error
+):
+    # ADAM-ERR0061 (demandeur non reconnu) tombe dès que l'autorisation est corrigée : aucun jour marqué
+    enedis.rejected_before = j(10)
+    enedis.rejected_code = "ADAM-ERR0061"
+    enedis.rejected_as_value_error = as_value_error
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+    enedis.calls.clear()
+
+    await raw_call(getattr(router, handler), j(39), j(32), use_cache=True)
+
+    assert not any(":rejected:" in k for k in cache.store)
+    assert enedis.calls == [(kind, j(39), j(32))]
+
+
+@RANGE_CACHE
+async def test_refus_400_sonde_en_echec_memorise_la_plage_exacte(enedis, cache, handler, kind):
+    # La sonde tombe sur une indisponibilité (503) : rien ne prouve que les jours sont refusés
+    enedis.rejected_before = j(10)
+    original = enedis._days
+
+    def probe_unavailable(kind_: str, start: str, end: str) -> list[str]:
+        if (start, end) == (j(34), j(33)):
+            enedis.calls.append((kind_, start, end))
+            raise RuntimeError("503 Service Unavailable")
+        return original(kind_, start, end)
+
+    enedis._days = probe_unavailable
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+    await raw_call(getattr(router, handler), j(40), j(33), use_cache=True)
+
+    assert not any(":rejected:" in k for k in cache.store)
+    assert enedis.calls == [(kind, j(40), j(33)), (kind, j(34), j(33))]
 
 
 @RANGE_CACHE
