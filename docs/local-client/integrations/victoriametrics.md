@@ -60,7 +60,7 @@ docker run -d -p 8428:8428 \
 ### Via variables d'environnement
 
 ```bash
-# .env.client
+# .env
 VICTORIAMETRICS_URL=http://localhost:8428
 VICTORIAMETRICS_ENABLED=true
 

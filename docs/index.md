@@ -20,12 +20,12 @@ import TabItem from '@theme/TabItem';
 
 ```bash
 # Cloner le repository
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer les identifiants MyElectricalData API
-cp .env.local-client.example .env.local-client
-nano .env.local-client
+cp .env.local-client.example .env
+nano .env
 
 # Démarrer les services
 docker compose up -d
@@ -39,15 +39,15 @@ open http://localhost:8100
 
 ```bash
 # Cloner le repository
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer les identifiants Enedis/RTE
 cp apps/api/.env.example apps/api/.env.docker
 nano apps/api/.env.docker
 
-# Démarrer les services
-docker compose up -d
+# Démarrer les services (PostgreSQL et Valkey à fournir)
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 
 # Accéder à l'application
 open http://localhost:8000
@@ -161,4 +161,4 @@ Déployez votre propre gateway multi-utilisateurs avec accès direct aux API Ene
 
 ## 🤝 Contribution
 
-Le projet est open-source. Les contributions sont les bienvenues sur [GitHub](https://github.com/MyElectricalData/myelectricaldata).
+Le projet est open-source. Les contributions sont les bienvenues sur [GitHub](https://github.com/MyElectricalData/myelectricaldata_new).

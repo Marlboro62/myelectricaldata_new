@@ -25,8 +25,8 @@ docker compose version
 ### Étape 1 : Cloner le dépôt
 
 ```bash
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 ```
 
 ### Étape 2 : Configurer l'environnement
@@ -65,12 +65,16 @@ ADMIN_EMAILS=admin@example.com
 
 ### Étape 3 : Démarrer les services
 
+:::caution PostgreSQL et Valkey
+`docker-compose.server.yml` ne démarre que le backend et le frontend : PostgreSQL et Valkey doivent être fournis à part, et `DATABASE_URL` / `REDIS_URL` pointer vers eux. Le frontend transmet les appels `/api` au backend (`API_PROXY_URL`).
+:::
+
 ```bash
 # Démarrer en arrière-plan
-docker compose up -d
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 
 # Vérifier le statut
-docker compose ps
+docker compose -f docker-compose.server.yml ps
 ```
 
 ### Étape 4 : Appliquer les migrations

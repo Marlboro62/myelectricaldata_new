@@ -71,4 +71,4 @@ kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "myelectricaldat
 5. MQTT integration is enabled - data will be published to {{ .Values.exports.mqtt.host }}:{{ .Values.exports.mqtt.port }}
 {{- end }}
 
-For more information, visit: https://github.com/MyElectricalData/myelectricaldata
+For more information, visit: https://github.com/MyElectricalData/myelectricaldata_new

@@ -91,7 +91,7 @@ docker compose -f dev/docker-compose.server.yml logs -f
 
 **Redemarrage necessaire uniquement si** :
 
-- Modification `.env.api`, `.env.client` ou `.env`
+- Modification `.env.api`, `.env.local-client` ou `.env`
 - Ajout dependances (`pyproject.toml`, `package.json`)
 - Modification `dev/docker-compose*.yml` ou `Dockerfile`
 

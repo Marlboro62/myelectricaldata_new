@@ -102,14 +102,14 @@ Le **mode client** de MyElectricalData est une version allégée de l'applicatio
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer les variables d'environnement
-cp .env.local-client.example .env.local-client
+cp .env.local-client.example .env
 
-# Éditer .env.local-client avec vos credentials API
-vim .env.local-client
+# Éditer .env avec vos credentials API
+vim .env
 
 # Démarrer le mode client
 docker compose up -d
