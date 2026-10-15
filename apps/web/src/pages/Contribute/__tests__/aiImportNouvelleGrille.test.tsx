@@ -2,7 +2,7 @@
 // l'ancienne grille ouverte se clôt à la veille dans la même contribution, au lieu de bloquer
 // la soumission par « Certaines puissances que vous souhaitez ajouter existent déjà ».
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, render, screen, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { EnergyOffer } from '@/api/energy'
@@ -27,6 +27,7 @@ import { energyApi } from '@/api/energy'
 import { useAllOffersState } from '../hooks/useAllOffersState'
 import { useAIImport } from '../hooks/useAIImport'
 import { useOfferSubmission } from '../hooks/useOfferSubmission'
+import RecapModal from '../components/alloffers/RecapModal'
 
 const ANCIENNE = '2026-02-05T00:00:00+00:00'
 
@@ -94,6 +95,16 @@ describe('import IA : nouvelle grille d\'une offre déjà en base (issue #145)',
     expect(state.newPowersData.map(p => [p.power, p.valid_from])).toEqual([
       [3, '2026-08-01'], [6, '2026-08-01'], [36, '2026-08-01'],
     ])
+  })
+
+  it('affiche la clôture au récapitulatif et laisse Soumettre actif', async () => {
+    const { result } = await importer(importJson('BasicWatt', '2026-08-01', [3, 6, 36]))
+    act(() => result.current.state.setPriceSheetUrl('https://example.org/grille.pdf'))
+    render(<RecapModal state={result.current.state} submitAllModifications={vi.fn()} submittingOffers={false} />)
+
+    expect(screen.getByText(/BasicWatt : grille du 05\/02\/2026 clôturée au 31\/07\/2026, remplacée par la grille du 01\/08\/2026/)).toBeTruthy()
+    expect(screen.queryByText(/existent déjà/)).toBeNull()
+    expect((screen.getByRole('button', { name: /Soumettre/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('envoie la clôture et la nouvelle grille dans la même contribution', async () => {
