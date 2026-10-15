@@ -13,6 +13,7 @@ import logging
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
+import httpx
 from sqlalchemy import select, and_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1717,6 +1718,12 @@ class SyncService:
             await self.db.commit()
             logger.info(f"[SYNC] Zen Flex sync complete: {result['created']} created, {result['updated']} updated")
 
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                logger.info("[SYNC] Zen Flex calendar not available on remote gateway (404 Not Found), skipping")
+            else:
+                logger.error(f"[SYNC] Failed to sync Zen Flex: {e}")
+                result["errors"].append(str(e))
         except Exception as e:
             logger.error(f"[SYNC] Failed to sync Zen Flex: {e}")
             result["errors"].append(str(e))
