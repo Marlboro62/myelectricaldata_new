@@ -76,10 +76,14 @@ Le mode client propose une navigation simplifiée par rapport au mode serveur.
 | Aspect | Mode Serveur | Mode Client |
 |--------|--------------|-------------|
 | Source données | Cache Valkey (24h) | PostgreSQL local (indéfini) |
-| Historique | Limité par cache | Complet depuis 1ère sync |
+| Historique | 3 ans (journalier), 2 ans (courbe de charge) | Tout ce que contient la base locale |
 | Performance | Requête Enedis si miss | Toujours local |
 
 **Mode client** : Les données sont persistées indéfiniment. Pas de rechargement depuis Enedis.
+Les pages affichent tout l'historique local, y compris celui importé depuis la V1
+([Migrer depuis la V1](./migration-v1.md)) : une carte, une barre et une courbe par année, sans
+plafond. Enedis n'est sollicité que dans sa fenêtre (3 ans de journalier, 2 ans de courbe de
+charge), pour combler les trous récents.
 
 ### Consommation (Euro)
 
@@ -87,7 +91,7 @@ Le mode client propose une navigation simplifiée par rapport au mode serveur.
 |--------|--------------|-------------|
 | Calcul prix | Temps réel | Temps réel |
 | Offres | Scraping + admin | Configuration locale |
-| Historique | Selon cache | Complet |
+| Historique | 2 dernières années | 2 dernières années (offre actuelle, jours Tempo) |
 
 **Mode client** : Les offres tarifaires sont configurées localement ou récupérées depuis l'API.
 
