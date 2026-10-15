@@ -25,7 +25,14 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.models import Base
-from src.models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData
+from src.models.client_mode import (
+    ConsumptionData,
+    DataGranularity,
+    MaxPowerData,
+    ProductionData,
+    SyncStatus,
+    SyncStatusType,
+)
 from src.services.import_v1 import SOURCE, run_import, to_source_url
 from src.services.local_data import LocalDataService
 from tests.v1_cache import SCHEMA, V1Cache
@@ -320,3 +327,47 @@ async def test_gros_volume_par_lots(session, tmp_path):
     expected = (await session.execute(select(func.count()).select_from(ConsumptionData))).scalar_one()
     assert report.inserted["consumption_data"] == expected
     assert expected >= 730 * 46
+
+
+# --- Bornes de données des statuts de synchro (MED-64) -----------------------------------------
+# Le front borne l'historique demandé par `oldest_data_date` : il doit refléter les données V1
+# dès l'import, sans attendre la synchro suivante.
+
+
+async def _bounds(db) -> dict[tuple[str, DataGranularity], tuple[date | None, date | None]]:
+    rows = (await db.execute(select(SyncStatus).where(SyncStatus.usage_point_id == PDL))).scalars()
+    return {(r.data_type, r.granularity): (r.oldest_data_date, r.newest_data_date) for r in rows}
+
+
+async def test_import_pose_les_bornes_des_statuts_de_synchro(session, v1):
+    await run_import(to_source_url(v1), session)
+
+    assert await _bounds(session) == {
+        ("consumption", DataGranularity.DAILY): (date(2020, 1, 5), date(2020, 1, 6)),
+        ("consumption", DataGranularity.DETAILED): (date(2020, 1, 5), date(2020, 1, 5)),
+        ("production", DataGranularity.DAILY): (date(2020, 1, 5), date(2020, 1, 5)),
+        ("max_power", DataGranularity.DAILY): (date(2020, 1, 5), date(2020, 1, 5)),
+    }
+
+
+async def test_import_recule_la_borne_d_un_statut_existant_sans_toucher_au_reste(session, v1):
+    """PDL déjà synchronisé depuis la passerelle : seule la borne ancienne recule, l'état de synchro reste."""
+    existant = SyncStatus(
+        usage_point_id=PDL, data_type="consumption", granularity=DataGranularity.DAILY,
+        status=SyncStatusType.SUCCESS, oldest_data_date=date(2023, 10, 17), newest_data_date=date(2026, 10, 15),
+        total_records=1095,
+    )
+    session.add(existant)
+    await session.commit()
+
+    await run_import(to_source_url(v1), session)
+
+    await session.refresh(existant)
+    assert (existant.oldest_data_date, existant.newest_data_date) == (date(2020, 1, 5), date(2026, 10, 15))
+    assert (existant.status, existant.total_records) == (SyncStatusType.SUCCESS, 1095)
+
+
+async def test_import_a_blanc_ne_touche_pas_aux_statuts(session, v1):
+    await run_import(to_source_url(v1), session, dry_run=True)
+
+    assert await _bounds(session) == {}
