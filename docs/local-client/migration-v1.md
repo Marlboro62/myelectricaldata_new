@@ -43,10 +43,13 @@ tard. L'import ignore ces lignes pour ne pas inscrire de faux zéros dans la V2 
 - puissance maximale à 0 ;
 - toute ligne en échec ou abandonnée par la V1 (`fail_count` ou `blacklist`).
 
-Une production journalière à 0 est gardée : un jour sans soleil est une vraie donnée.
+Une production journalière à 0 est une vraie donnée possible (un jour sans soleil), mais aussi la
+trace d'une première tentative ratée : dans les 3 ans que la V2 synchronise elle-même, l'import la
+lui laisse (elle ramènera la vraie valeur) ; plus ancienne, il la garde.
 
-Une journée de courbe de charge incomplète est aussi écartée en entier : la V2 la récupérera
-complète auprès d'Enedis si elle est encore dans la fenêtre des 2 ans.
+Même logique pour une journée de courbe de charge incomplète : dans les 2 ans que la V2 synchronise,
+elle est écartée en entier pour que la V2 la récupère complète ; plus ancienne, les points présents
+sont gardés tels quels.
 :::
 
 **Aucune donnée de la V2 n'est écrasée** : si une date existe déjà dans la V2 (synchronisée depuis
@@ -129,7 +132,7 @@ Import V1 terminé
   Consommation       2898 ajoutées          1 déjà présentes
   Production         1460 ajoutées          0 déjà présentes
   Puissance max      1460 ajoutées          0 déjà présentes
-  écartées : 1 journées de courbe de charge incomplètes
+  écartées : 1 journées de courbe de charge incomplètes, laissées à la synchro V2
   écartées : 1 consommation à 0 (échec V1)
   PDL ignorés, absents de ce client : 98765432109876
   (attendez la première synchronisation, ou lancez-la depuis le Dashboard, puis relancez l'import)
@@ -196,15 +199,24 @@ Configurez ensuite les exports dans l'interface V2 ([Exporteurs](./exporters.md)
 
 Les statistiques V2 ne portent pas les mêmes identifiants que celles de la V1
 (`myelectricaldata:consumption_<pdl>_base` contre `myelectricaldata:<pdl>_base_consumption`), mais
-partagent le même préfixe `myelectricaldata`. Deux options :
+partagent le même préfixe `myelectricaldata`.
+
+:::warning Le panneau Énergie ne couvre que la période de la courbe de charge
+L'exporteur V2 bâtit les statistiques sur la courbe de charge dès qu'il en a, et ne se rabat sur le
+journalier que s'il n'existe aucune courbe de charge pour le PDL. Les années anciennes dont la V1 ne
+gardait que le journalier sont bien importées et visibles dans l'interface V2, mais n'apparaissent
+pas dans le panneau Énergie.
+:::
+
+Deux options :
 
 - **Repartir sur les statistiques V2** (le plus simple) : après l'import, lancez un export
   **Complet (réinitialise)**. Il supprime les statistiques du préfixe, celles de la V1 comprises,
-  puis réimporte tout l'historique depuis la V2, historique V1 inclus. Resélectionnez ensuite les
-  nouvelles séries dans **Paramètres** > **Tableaux de bord** > **Énergie** de Home Assistant.
-- **Garder les statistiques V1 à part** : changez `statistic_id_prefix` (par exemple
-  `myelectricaldata_v2`) avant le premier export. Les anciennes séries restent intactes, les nouvelles
-  sont créées à côté.
+  puis réimporte l'historique depuis la V2, courbe de charge V1 incluse. Resélectionnez ensuite
+  les nouvelles séries dans **Paramètres** > **Tableaux de bord** > **Énergie** de Home Assistant.
+- **Garder les statistiques V1** : changez `statistic_id_prefix` (par exemple `myelectricaldata_v2`)
+  avant le premier export. Les anciennes séries restent intactes et consultables ; ne sélectionnez
+  pas les deux jeux comme sources du panneau Énergie, il additionnerait les périodes communes.
 
 Voir [Home Assistant](./integrations/home-assistant.md) pour le détail des modes d'export.
 

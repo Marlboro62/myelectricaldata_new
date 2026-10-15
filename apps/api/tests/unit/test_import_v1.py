@@ -105,7 +105,7 @@ async def test_zeros_et_echecs_du_journalier(cache):
         .close()
     )
 
-    records = await load_v1(to_source_url(str(path)))
+    records = await load_v1(to_source_url(str(path)), today=date(2026, 10, 15))
 
     assert [(r["date"], r["value"]) for r in records.consumption] == [(date(2020, 1, 4), 8000)]
     assert [(r["date"], r["value"]) for r in records.production] == [
@@ -113,6 +113,20 @@ async def test_zeros_et_echecs_du_journalier(cache):
         (date(2020, 1, 4), 1500),
     ]
     assert records.skipped == {"zero_consommation": 1, "blacklist": 2, "echec": 2}
+
+
+async def test_zero_de_production_recent_laisse_a_la_synchro(cache):
+    """Dans les 1095 jours que la V2 resynchronise, un 0 de production peut être un fantôme V1 : on le lui laisse."""
+    path = (
+        cache.daily(PDL, date(2020, 1, 1), 0, direction="production")
+        .daily(PDL, date(2020, 1, 2), 1500, direction="production")
+        .close()
+    )
+
+    records = await load_v1(to_source_url(str(path)), today=date(2020, 1, 10))
+
+    assert [(r["date"], r["value"]) for r in records.production] == [(date(2020, 1, 2), 1500)]
+    assert records.skipped == {"zero_production_resync": 1}
 
 
 async def test_courbe_de_charge_journee_complete(cache):
@@ -144,20 +158,41 @@ async def test_courbe_de_charge_au_pas_de_10_minutes(cache):
     assert {r["raw_data"]["p"] for r in records.consumption} == {"PT10M"}
 
 
-async def test_journee_incomplete_ecartee(cache):
-    """La synchro V2 tient une date pour présente dès une ligne : une journée partielle ne serait jamais complétée."""
+async def test_journee_incomplete_recente_ecartee(cache):
+    """La synchro V2 tient une date pour présente dès une ligne : une journée partielle qu'elle peut encore
+    redemander (730 jours) ne serait jamais complétée."""
     path = cache.detail_day(PDL, date(2020, 1, 5), count=47).detail_day(PDL, date(2020, 1, 6)).close()
 
-    records = await load_v1(to_source_url(str(path)))
+    records = await load_v1(to_source_url(str(path)), today=date(2020, 1, 10))
 
     assert {r["date"] for r in records.consumption} == {date(2020, 1, 6)}
     assert records.skipped == {"journee_incomplete": 1}
 
 
+async def test_journee_incomplete_ancienne_gardee(cache):
+    """Hors fenêtre de synchro, la passerelle ne rendra plus la journée : on garde ce que la V1 en a."""
+    path = cache.detail_day(PDL, date(2020, 1, 5), count=47).close()
+
+    records = await load_v1(to_source_url(str(path)), today=date(2026, 10, 15))
+
+    assert len(records.consumption) == 47
+    assert records.skipped == {}
+
+
+async def test_ligne_d_echec_du_detail_ecartee(cache):
+    """`detail_fail_increment` laisse une ligne 0 W au pas de 0 min à minuit : jamais importée, même hors fenêtre."""
+    path = cache.detail_day(PDL, date(2020, 1, 5)).detail_fail(PDL, date(2020, 1, 6)).close()
+
+    records = await load_v1(to_source_url(str(path)), today=date(2026, 10, 15))
+
+    assert {r["date"] for r in records.consumption} == {date(2020, 1, 5)}
+    assert records.skipped == {"echec": 1}
+
+
 async def test_passage_a_l_heure_d_ete_journee_de_46_points(cache):
     path = cache.detail_day(PDL, date(2020, 3, 29), count=46).close()
 
-    records = await load_v1(to_source_url(str(path)))
+    records = await load_v1(to_source_url(str(path)), today=date(2020, 4, 1))
 
     assert len(records.consumption) == 46
     assert records.skipped == {}

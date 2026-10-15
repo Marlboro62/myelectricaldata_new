@@ -29,7 +29,8 @@ MOTIFS = {
     "echec": "échecs de récupération V1",
     "zero_consommation": "consommation à 0 (échec V1)",
     "puissance_nulle": "puissance max à 0 (échec V1)",
-    "journee_incomplete": "journées de courbe de charge incomplètes",
+    "zero_production_resync": "production à 0 récentes, laissées à la synchro V2 (ambiguës en V1)",
+    "journee_incomplete": "journées de courbe de charge incomplètes, laissées à la synchro V2",
 }
 
 

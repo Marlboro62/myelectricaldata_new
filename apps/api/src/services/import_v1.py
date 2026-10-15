@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from ..models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData
 from ..models.pdl import PDL
+from .sync import MAX_DAILY_DAYS, MAX_DETAILED_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +105,16 @@ def _day_minutes(day: date) -> int:
     return min(int((end - start).total_seconds() // 60), 24 * 60)
 
 
-def _skip_reason(direction: str, value: int | None, blacklist: int, fail_count: int) -> str | None:
+def _skip_reason(
+    direction: str, value: int | None, blacklist: int, fail_count: int, *, resyncable: bool = False
+) -> str | None:
     """Motif d'écart d'une ligne journalière V1, ou None pour la garder.
 
     Un jour sans donnée Enedis laisse en V1 une ligne à 0 (`daily_fail_increment`), dès la
     première tentative et donc avec `fail_count = 0` : un 0 de consommation est un échec (un
-    Linky consomme toujours en veille), un 0 de production peut être une vraie journée nulle.
+    Linky consomme toujours en veille), un 0 de production peut être une vraie journée nulle
+    comme ce fantôme. Dans la fenêtre que la V2 resynchronise (`resyncable`), on le lui laisse :
+    elle ramènera la vraie valeur ; au-delà, on le garde, c'est tout ce qu'il reste.
     """
     if blacklist:
         return "blacklist"
@@ -119,6 +124,8 @@ def _skip_reason(direction: str, value: int | None, blacklist: int, fail_count: 
         return "zero_consommation"
     if not value and direction == "max_power":
         return "puissance_nulle"
+    if not value and resyncable:
+        return "zero_production_resync"
     return None
 
 
@@ -135,20 +142,27 @@ def _daily_record(usage_point_id: str, when: datetime, value: int) -> dict[str, 
     }
 
 
-def _detail_records(rows: list[Any], skipped: Counter[str]) -> list[dict[str, Any]]:
-    """Courbe de charge V1 (W moyen, horodatée au début d'intervalle), journées incomplètes écartées.
+def _detail_records(rows: list[Any], skipped: Counter[str], today: date) -> list[dict[str, Any]]:
+    """Courbe de charge V1 (W moyen, horodatée au début d'intervalle), journée par journée.
 
     La synchro V2 tient une date pour présente dès une ligne (`_find_missing_ranges`) : une
-    journée partielle importée ne serait jamais complétée depuis la passerelle.
+    journée partielle importée ne serait jamais complétée depuis la passerelle. Dans la fenêtre
+    qu'elle resynchronise (`MAX_DETAILED_DAYS`), on écarte donc la journée incomplète ; plus
+    ancienne, la passerelle ne la rendra plus, on garde ce que la V1 en a.
     """
     by_day: dict[tuple[str, date], dict[datetime, Any]] = defaultdict(dict)
     for row in rows:
+        if int(row.interval) <= 0:
+            # ligne d'échec V1 (`detail_fail_increment`) : value=0, interval=0 à minuit
+            skipped["echec"] += 1
+            continue
         start = _as_datetime(row.date)
         by_day[(row.usage_point_id, start.date())][start] = row
 
+    resync_start = today - timedelta(days=MAX_DETAILED_DAYS)
     records = []
     for (usage_point_id, day), points in by_day.items():
-        if sum(int(row.interval) for row in points.values()) < _day_minutes(day):
+        if day >= resync_start and sum(int(row.interval) for row in points.values()) < _day_minutes(day):
             skipped["journee_incomplete"] += 1
             continue
         for start in sorted(points):
@@ -178,8 +192,13 @@ def _max_power_record(row: Any) -> dict[str, Any]:
     }
 
 
-async def load_v1(url: str, pdls: list[str] | None = None) -> V1Records:
-    """Lit une base V1 (lecture seule) et la convertit en lignes V2, sans rien écrire."""
+async def load_v1(url: str, pdls: list[str] | None = None, *, today: date | None = None) -> V1Records:
+    """Lit une base V1 (lecture seule) et la convertit en lignes V2, sans rien écrire.
+
+    `today` borne les fenêtres que la synchro V2 couvre encore (`[today - N jours, today[`).
+    """
+    today = today or date.today()
+    daily_resync_start = today - timedelta(days=MAX_DAILY_DAYS)
     engine = create_async_engine(_engine_url(url))
     try:
         async with engine.connect() as conn:
@@ -208,13 +227,15 @@ async def load_v1(url: str, pdls: list[str] | None = None) -> V1Records:
             for direction in DIRECTIONS:
                 target = records.consumption if direction == "consumption" else records.production
                 for row in await query(f"SELECT usage_point_id, date, value, blacklist, fail_count FROM {direction}_daily"):
-                    reason = _skip_reason(direction, row.value, row.blacklist, row.fail_count)
+                    when = _as_datetime(row.date)
+                    reason = _skip_reason(direction, row.value, row.blacklist, row.fail_count,
+                                          resyncable=when.date() >= daily_resync_start)
                     if reason:
                         skipped[reason] += 1
                     else:
-                        target.append(_daily_record(row.usage_point_id, _as_datetime(row.date), row.value))
+                        target.append(_daily_record(row.usage_point_id, when, row.value))
                 detail = await query(f"SELECT usage_point_id, date, value, interval FROM {direction}_detail")
-                target.extend(_detail_records(list(detail), skipped))
+                target.extend(_detail_records(list(detail), skipped, today))
 
             for row in await query(
                 "SELECT usage_point_id, date, event_date, value, blacklist, fail_count FROM consumption_daily_max_power"
@@ -231,6 +252,23 @@ async def load_v1(url: str, pdls: list[str] | None = None) -> V1Records:
         await engine.dispose()
 
 
+async def _detail_days(db: AsyncSession, model: type, pdls: set[str]) -> set[tuple[str, date]]:
+    """Journées de courbe de charge déjà en V2 : elles font foi en entier, quel que soit leur pas.
+
+    La contrainte unique ne voit que l'heure de début : une journée V2 au pas de 30 min et la
+    même journée V1 au pas de 10 min se superposeraient (3 fois l'énergie à l'export).
+    """
+    rows = await db.execute(
+        select(model.usage_point_id, model.date).distinct()
+        .where(model.granularity == DataGranularity.DETAILED, model.usage_point_id.in_(list(pdls)))
+    )
+    return {(usage_point_id, day) for usage_point_id, day in rows}
+
+
+def _covered(row: dict[str, Any], days: set[tuple[str, date]]) -> bool:
+    return row.get("granularity") == DataGranularity.DETAILED and (row["usage_point_id"], row["date"]) in days
+
+
 async def _insert(db: AsyncSession, model: type, constraint: str, rows: list[dict[str, Any]]) -> int:
     """INSERT … ON CONFLICT DO NOTHING par lots ; renvoie le nombre de lignes réellement ajoutées."""
     inserted = 0
@@ -242,10 +280,10 @@ async def _insert(db: AsyncSession, model: type, constraint: str, rows: list[dic
 
 
 async def run_import(
-    url: str, db: AsyncSession, *, pdls: list[str] | None = None, dry_run: bool = False
+    url: str, db: AsyncSession, *, pdls: list[str] | None = None, dry_run: bool = False, today: date | None = None
 ) -> ImportReport:
     """Importe une base V1 dans la base du client V2 ; `dry_run` compte puis annule tout."""
-    records = await load_v1(url, pdls)
+    records = await load_v1(url, pdls, today=today)
     known = set((await db.execute(
         select(PDL.usage_point_id).where(PDL.usage_point_id.in_(records.usage_points))
     )).scalars())
@@ -263,7 +301,8 @@ async def run_import(
     try:
         for model, constraint, rows in targets:
             rows = [r for r in rows if r["usage_point_id"] in known]
-            inserted = await _insert(db, model, constraint, rows)
+            days = await _detail_days(db, model, known) if model is not MaxPowerData else set()
+            inserted = await _insert(db, model, constraint, [r for r in rows if not _covered(r, days)])
             report.inserted[model.__tablename__] = inserted
             report.present[model.__tablename__] = len(rows) - inserted
     except Exception:

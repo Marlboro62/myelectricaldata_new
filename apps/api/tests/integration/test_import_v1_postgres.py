@@ -4,12 +4,15 @@ L'écriture passe par `INSERT … ON CONFLICT DO NOTHING` sur les contraintes un
 DISTINCT du client (PostgreSQL 15+, le compose client fournit postgres:16). Base fournie par
 `TEST_POSTGRES_URL` (ex. un `docker run postgres:16-alpine`), sinon lancée avec les binaires
 locaux s'ils sont en version 15 ou plus ; à défaut le module est ignoré.
+
+⚠️ La base visée est VIDÉE à chaque test (drop_all du schéma V2) : jamais une base réelle.
 """
 import importlib.util
 import os
 import re
 import shutil
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import uuid
@@ -18,16 +21,19 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.models import Base
 from src.models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData
 from src.services.import_v1 import SOURCE, run_import, to_source_url
 from src.services.local_data import LocalDataService
-from tests.v1_cache import V1Cache
+from tests.v1_cache import SCHEMA, V1Cache
 
 PDL = "12345678901234"
 PDL_INCONNU = "98765432109876"
+V1_TABLES = ("alembic_version", "usage_points", "consumption_daily", "production_daily",
+             "consumption_detail", "production_detail", "consumption_daily_max_power")
 
 
 def _local_postgres() -> tuple[str, str] | None:
@@ -108,6 +114,47 @@ def v1(tmp_path):
     )
 
 
+async def _copy_v1_to_postgres(sqlite_path: str, conn) -> None:
+    """Rejoue un cache.db dans une base PostgreSQL vide (dates texte SQLite → TIMESTAMP)."""
+    for statement in SCHEMA:
+        await conn.execute(text(statement.replace("DATETIME", "TIMESTAMP")))
+    src = sqlite3.connect(sqlite_path)
+    for table in V1_TABLES:
+        columns = src.execute(f"PRAGMA table_info({table})").fetchall()
+        names = [c[1] for c in columns]
+        dates = {c[1] for c in columns if c[2] == "DATETIME"}
+        rows = [
+            {n: datetime.fromisoformat(v) if n in dates and v else v for n, v in zip(names, r)}
+            for r in src.execute(f"SELECT {', '.join(names)} FROM {table}")
+        ]
+        if rows:
+            params = ", ".join(f":{n}" for n in names)
+            await conn.execute(text(f"INSERT INTO {table} ({', '.join(names)}) VALUES ({params})"), rows)
+    src.close()
+
+
+@pytest.fixture
+async def v1_postgres(pg_url, v1):
+    """La même V1 que `v1`, servie par PostgreSQL (clé `storage_uri` de son config.yaml) : base jetable à côté."""
+    name = f"v1_{uuid.uuid4().hex[:8]}"
+    admin = create_async_engine(pg_url, isolation_level="AUTOCOMMIT")
+    try:
+        async with admin.connect() as conn:
+            await conn.execute(text(f"CREATE DATABASE {name}"))
+    except DBAPIError:
+        await admin.dispose()
+        pytest.skip("CREATE DATABASE refusé sur TEST_POSTGRES_URL")
+    url = pg_url.replace("postgresql+asyncpg://", "postgresql://").rsplit("/", 1)[0] + f"/{name}"
+    engine = create_async_engine(to_source_url(url))
+    async with engine.begin() as conn:
+        await _copy_v1_to_postgres(v1, conn)
+    await engine.dispose()
+    yield url
+    async with admin.connect() as conn:
+        await conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
+    await admin.dispose()
+
+
 async def _count(db, model) -> int:
     return (await db.execute(select(func.count()).select_from(model))).scalar_one()
 
@@ -148,6 +195,20 @@ async def test_donnee_v2_jamais_ecrasee(session, v1):
     assert (row.value, row.source) == (11111, "myelectricaldata")
 
 
+async def test_journee_v2_fait_foi_meme_a_un_autre_pas(session, v1):
+    """Une journée de courbe de charge déjà en V2 est gardée en entier : la V1 au même jour n'ajoute rien, quel que soit son pas."""
+    session.add(ConsumptionData(usage_point_id=PDL, date=date(2020, 1, 5), granularity=DataGranularity.DETAILED,
+                                interval_start="00:10", value=900, source="myelectricaldata",
+                                raw_data={"v": "900", "d": "2020-01-05 00:10:00", "p": "PT10M"}))
+    await session.commit()
+
+    report = await run_import(to_source_url(v1), session)
+
+    assert report.inserted["consumption_data"] == 2
+    assert report.present["consumption_data"] == 48
+    assert await _count(session, ConsumptionData) == 3
+
+
 async def test_import_rejouable(session, v1):
     await run_import(to_source_url(v1), session)
 
@@ -172,6 +233,21 @@ async def test_filtre_pdl(session, v1):
 
     assert report.inserted == {"consumption_data": 0, "production_data": 0, "max_power_data": 0}
     assert report.unknown_pdls == [PDL_INCONNU]
+
+
+async def test_source_v1_sur_postgresql(session, v1_postgres):
+    """`storage_uri` V1 en PostgreSQL : mêmes lignes qu'avec le cache.db (dates reçues en objets, pas en texte)."""
+    report = await run_import(to_source_url(v1_postgres), session)
+
+    assert report.inserted == {"consumption_data": 50, "production_data": 1, "max_power_data": 1}
+    assert report.unknown_pdls == [PDL_INCONNU]
+    pic = (await session.execute(select(MaxPowerData))).scalar_one()
+    assert (pic.date, pic.interval_start, pic.raw_data["d"]) == (date(2020, 1, 5), "18:42", "2020-01-05 18:42:00")
+    detail = (await session.execute(
+        select(ConsumptionData.interval_start).where(ConsumptionData.granularity == DataGranularity.DETAILED)
+        .order_by(ConsumptionData.interval_start)
+    )).scalars().all()
+    assert (detail[0], detail[-1], len(detail)) == ("00:00", "23:30", 48)
 
 
 async def test_la_synchro_ne_redemande_pas_les_dates_importees(session, v1):

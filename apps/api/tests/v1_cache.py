@@ -96,6 +96,15 @@ class V1Cache:
             )
         return self
 
+    def detail_fail(self, usage_point_id: str, day: date, *, direction: str = "consumption") -> "V1Cache":
+        """Ligne laissée par `detail_fail_increment` à la première tentative ratée : 0 W, pas de 0 min, à minuit."""
+        when = datetime.combine(day, datetime.min.time())
+        self.conn.execute(
+            f"INSERT INTO {direction}_detail VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (_id(usage_point_id, when), usage_point_id, _ts(when), 0, 0, "", 0, 0),
+        )
+        return self
+
     def max_power(self, usage_point_id: str, day: date, value: int, event: datetime | None, *,
                   blacklist: int = 0, fail_count: int = 0) -> "V1Cache":
         when = datetime.combine(day, datetime.min.time())
