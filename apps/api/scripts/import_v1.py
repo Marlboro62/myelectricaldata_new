@@ -1,7 +1,7 @@
 """Importe l'historique de l'ancien client local myelectricaldata_import (« V1 ») dans ce client (MED-60).
 
-Dans le conteneur backend du client local, après la première connexion (les PDL doivent
-exister côté V2) :
+Dans le conteneur backend du client local, après la première synchronisation (les PDL
+doivent exister côté V2) :
 
     docker compose cp ./ancien/data/cache.db backend:/tmp/cache.db
     docker compose exec backend python scripts/import_v1.py /tmp/cache.db --dry-run
@@ -54,7 +54,7 @@ def print_report(report) -> None:
         print(f"  écartées : {count} {MOTIFS.get(motif, motif)}")
     if report.unknown_pdls:
         print(f"  PDL ignorés, absents de ce client : {', '.join(report.unknown_pdls)}")
-        print("  (connectez-vous d'abord à l'interface pour les synchroniser depuis votre compte, puis relancez)")
+        print("  (attendez la première synchronisation, ou lancez-la depuis le Dashboard, puis relancez l'import)")
 
 
 async def main(argv: list[str] | None = None) -> int:
