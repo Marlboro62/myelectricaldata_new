@@ -8,6 +8,7 @@ Choisissez la méthode d'installation adaptée à votre environnement.
 |---------|-------------|-----------------|
 | [Docker Compose](./docker.md) | Installation simple et rapide | Usage domestique, Raspberry Pi |
 | [Helm Chart](./helm.md) | Déploiement Kubernetes | Infrastructure existante K8s |
+| [Proxmox LXC](https://github.com/Marlboro62/myelectricaldata-proxmox) | Script communautaire, non officiel : conteneur LXC sans Docker | Serveur Proxmox VE |
 
 ## Prérequis communs
 
