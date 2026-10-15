@@ -292,7 +292,7 @@ function GlobalSelectAll({ state }: { state: AllOffersState }) {
 function ModifiedOffersSection({ state }: { state: AllOffersState }) {
   const {
     offersArray, filterProvider, isOfferModified,
-    editedOffers, unchangedOfferIds,
+    editedOffers, unchangedOfferIds, newPowersData,
     recapExcludedPowers, setRecapExcludedPowers,
   } = state
 
@@ -331,6 +331,11 @@ function ModifiedOffersSection({ state }: { state: AllOffersState }) {
         const selectedCount = modifiedOffers.filter(o => !recapExcludedPowers.has(`modified-${o.id}`)).length
         const allSelected = selectedCount === modifiedOffers.length
         const noneSelected = selectedCount === 0
+        // Grille remplacée par une grille importée plus récente : close à la veille (issue #145)
+        const closed = modifiedOffers.find(o => editedOffers[o.id]?.valid_to)
+        const replacement = closed && newPowersData.find(p =>
+          p.offer_type === groupType && p.valid_from && p.offer_name && getCleanOfferName(p.offer_name) === groupName
+        )
 
         return (
           <div key={groupKey} className={`rounded-lg border overflow-hidden ${allUnchanged ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'}`}>
@@ -349,6 +354,13 @@ function ModifiedOffersSection({ state }: { state: AllOffersState }) {
                 </div>
               )}
             </div>
+
+            {closed && (
+              <p className="px-4 py-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+                {groupName} : grille{closed.valid_from ? ` du ${frDate(closed.valid_from)}` : ''} clôturée au {frDate(editedOffers[closed.id].valid_to)}
+                {replacement?.valid_from ? `, remplacée par la grille du ${frDate(replacement.valid_from)}` : ''}
+              </p>
+            )}
 
             {/* Tableau des offres */}
             <div className="overflow-x-auto">
@@ -412,6 +424,8 @@ function ModifiedOffersSection({ state }: { state: AllOffersState }) {
     </>
   )
 }
+
+const frDate = (date: string) => new Date(date).toLocaleDateString('fr-FR')
 
 // --- Ligne d'offre dans le récap ---
 

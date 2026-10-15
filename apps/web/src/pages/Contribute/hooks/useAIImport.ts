@@ -4,6 +4,7 @@
 import { energyApi, type EnergyOffer } from '@/api/energy'
 import { toast } from '@/stores/notificationStore'
 import { getFieldKeysForOfferType, getCleanOfferName } from '../utils/offerPricing'
+import { dayBefore, findOpenGridToClose } from '../utils/gridReplacement'
 import type { AllOffersState } from './useAllOffersState'
 
 // Types supportés par le simulateur et le backend
@@ -256,6 +257,7 @@ export function useAIImport(state: AllOffersState) {
 
       for (const offer of deduplicatedOffers) {
         let isHistoricalImport = false
+        let periodWarning: string | undefined
 
         // Offre deprecated
         if (offer.deprecated === true) {
@@ -327,7 +329,23 @@ export function useAIImport(state: AllOffersState) {
               if (periodMatch.length > 0) {
                 existingFiltered = periodMatch
               } else {
-                // Nouvelle periode : traiter comme ajout
+                // Nouvelle periode : la grille importee remplace la grille ouverte du meme nom,
+                // close a la veille dans la meme contribution (issue #145)
+                const toClose = findOpenGridToClose(existingForType, offer.offer_name, offer.valid_from)
+                const closeDate = dayBefore(offer.valid_from)
+                for (const o of toClose) {
+                  updatedOffers[o.id] = { ...(updatedOffers[o.id] || {}), valid_to: closeDate }
+                }
+                if (toClose.length === 0) {
+                  const laterGrid = existingFiltered.find(o =>
+                    !o.valid_to && o.valid_from &&
+                    getCleanOfferName(o.name).toLowerCase() === cleanJson &&
+                    new Date(o.valid_from).toLocaleDateString('sv-SE') > importDate
+                  )
+                  if (laterGrid?.valid_from) {
+                    periodWarning = `Une grille ouverte depuis le ${new Date(laterGrid.valid_from).toLocaleDateString('fr-FR')} existe déjà pour « ${offer.offer_name} » : une grille plus ancienne s'importe comme historique (avec "valid_until"), ou fixez d'abord la date de fin de la grille ouverte.`
+                  }
+                }
                 existingFiltered = []
               }
             } else {
@@ -508,7 +526,7 @@ export function useAIImport(state: AllOffersState) {
           offer_name: offer.offer_name || offer.offer_type,
           matched, added, unchanged,
           deprecated: isHistoricalImport || undefined,
-          warning: offer.warning,
+          warning: [offer.warning, periodWarning].filter(Boolean).join(' ') || undefined,
         })
       }
 

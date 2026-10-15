@@ -226,18 +226,22 @@ export function useAllOffersState() {
 
   const visibleGroupNames = useMemo(() => activeGroupNames, [activeGroupNames])
 
-  // Puissances existantes pour le fournisseur/type
+  // Puissances existantes pour le fournisseur/type, sur leur periode effective : une date de fin
+  // en cours d'edition (cloture d'une grille remplacee, issue #145) compte deja pour les doublons
   const existingPowers = useMemo(() => {
     return providerOffers
-      .map(offer => ({
-        power: offer.power_kva || 0,
-        offer_type: offer.offer_type,
-        offer_name: getCleanOfferName(offer.name),
-        valid_from: offer.valid_from,
-        valid_to: offer.valid_to,
-      }))
+      .map(offer => {
+        const editedValidTo = editedOffers[offer.id]?.valid_to
+        return {
+          power: offer.power_kva || 0,
+          offer_type: offer.offer_type,
+          offer_name: getCleanOfferName(offer.name),
+          valid_from: offer.valid_from,
+          valid_to: editedValidTo !== undefined ? (editedValidTo || undefined) : offer.valid_to,
+        }
+      })
       .filter(p => p.power > 0)
-  }, [providerOffers])
+  }, [providerOffers, editedOffers])
 
   // Détection dynamique des champs de prix pour les types non standard
   const dynamicPriceFields = useMemo(() => {
