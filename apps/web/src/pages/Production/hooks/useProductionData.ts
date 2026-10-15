@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { pdlApi } from '@/api/pdl'
 import { enedisApi } from '@/api/enedis'
+import { resolveHistoryStart } from '@/utils/localSyncStatus'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import { buildMeasure, getReadings, getUnit } from '@/utils/enedisMeasure'
 import type { DateRange } from '../types/production.types'
@@ -38,15 +39,18 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
     queryFn: async () => {
       if (!selectedPDL || !dateRange) return null
 
+      // Mode client : remonter jusqu'à la donnée locale la plus ancienne (import V1, MED-64)
+      const start = await resolveHistoryStart(selectedPDL, dateRange.start, 'production_daily')
+
       // Calculate the total date range in days
-      const startDate = new Date(dateRange.start + 'T00:00:00Z')
+      const startDate = new Date(start + 'T00:00:00Z')
       const endDate = new Date(dateRange.end + 'T00:00:00Z')
       const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
       // If the range is <= 365 days, make a single call
       if (totalDays <= 365) {
         return enedisApi.getProductionDaily(selectedPDL, {
-          start: dateRange.start,
+          start,
           end: dateRange.end,
           use_cache: true,
         })
@@ -112,7 +116,7 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
             grandeurMetier: 'PROD',
             unite: getUnit(firstData) ?? 'Wh',
             pas: firstData?.pas,
-            start: dateRange.start,
+            start,
             end: dateRange.end,
           }),
         }
