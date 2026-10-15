@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.0...2.6.1) (2026-10-15)
+
+### Bug Fixes
+
+* **sync:** gracefully handle gateway 404 on Zen Flex calendar ([b7949dc](https://github.com/MyElectricalData/myelectricaldata_new/commit/b7949dcf8bc3e40ae998dc92e65bbbf762e77041))
+* **sync:** MED-50 / quota passerelle en HTTP 200 et arret du PDL entier ([9dd665c](https://github.com/MyElectricalData/myelectricaldata_new/commit/9dd665cbf4989f56fe8cfb20570d12c0013036cf)), closes [#137](https://github.com/MyElectricalData/myelectricaldata_new/issues/137)
+* **sync:** MED-50 / suspendre la synchro du compte jusqu'a minuit UTC apres un quota ([c973fc0](https://github.com/MyElectricalData/myelectricaldata_new/commit/c973fc02b1ab3114d1fca7e8fb302fd65770323f))
+
 ## [2.6.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.6...2.6.0) (2026-10-15)
 
 ### Features
