@@ -20,6 +20,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "doc",
+      id: "local-client/migration-v1",
+      label: "Migrer depuis la V1",
+    },
+    {
+      type: "doc",
       id: "local-client/configuration",
       label: "Configuration",
     },

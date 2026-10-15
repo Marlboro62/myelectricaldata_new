@@ -10,6 +10,11 @@ Choisissez la méthode d'installation adaptée à votre environnement.
 | [Helm Chart](./helm.md) | Déploiement Kubernetes | Infrastructure existante K8s |
 | [Proxmox LXC](https://github.com/Marlboro62/myelectricaldata-proxmox) | Script communautaire, non officiel : conteneur LXC sans Docker | Serveur Proxmox VE |
 
+:::tip Vous utilisez déjà l'ancien client (V1) ?
+Installez la V2 à côté, puis importez l'historique de la V1 pour ne rien perdre :
+[Migrer depuis la V1](../migration-v1.md).
+:::
+
 ## Prérequis communs
 
 ### Compte MyElectricalData
