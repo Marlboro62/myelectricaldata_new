@@ -47,8 +47,8 @@ cd myelectricaldata_new
 cp .env.local-client.example .env
 nano .env  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
 
-# Démarrer
-docker compose -f docker-compose.yml up -d
+# Démarrer (base SQLite ; docker-compose.yml pour PostgreSQL)
+docker compose -f docker-compose.sqlite.yml up -d
 
 # Accéder
 open http://localhost:8100
@@ -69,7 +69,7 @@ helm dependency build ./myelectricaldata-client
 helm install myelectricaldata ./myelectricaldata-client \
   --set secrets.med.clientId.value=cli_xxx \
   --set secrets.med.clientSecret.value=xxx \
-  --set postgres.auth.password=xxx
+  --set postgres.enabled=false  # base SQLite ; ou --set postgres.auth.password=xxx
 ```
 
 ➡️ [Guide complet Helm](./helm.md)
@@ -83,4 +83,4 @@ helm install myelectricaldata ./myelectricaldata-client \
 |---------|------|
 | Frontend | 8100 |
 | Backend API | 8181 |
-| PostgreSQL | 5433 (interne) |
+| PostgreSQL (`docker-compose.yml` seulement) | 5433 (interne) |

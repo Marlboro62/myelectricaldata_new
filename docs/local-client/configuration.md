@@ -37,7 +37,7 @@ CLIENT_FRONTEND_PORT=8100
 # Port du backend API (défaut: 8181)
 CLIENT_BACKEND_PORT=8181
 
-# Port PostgreSQL interne (défaut: 5433)
+# Port PostgreSQL interne, docker-compose.yml seulement (défaut: 5433)
 CLIENT_POSTGRES_PORT=5433
 ```
 
@@ -49,6 +49,19 @@ TZ=Europe/Paris
 ```
 
 ### Base de données
+
+Le backend lit `DATABASE_URL`, que chaque fichier compose fixe :
+
+| Compose | `DATABASE_URL` |
+|---------|----------------|
+| `docker-compose.sqlite.yml` (recommandé) | `sqlite+aiosqlite:////app/data/myelectricaldata.db` (fichier dans le volume `myelectricaldata_data`) |
+| `docker-compose.yml` | `postgresql+asyncpg://…@postgres:5432/…`, construite depuis les variables ci-dessous |
+
+En SQLite, aucune variable de base n'est à renseigner. Le backend crée le fichier et son schéma au
+premier démarrage, et règle SQLite pour les écritures simultanées du scheduler et de l'interface
+(journal WAL, attente de 30 s sur un verrou).
+
+Variables propres à `docker-compose.yml` :
 
 ```bash
 # Credentials PostgreSQL local (défaut: client/client)
@@ -244,7 +257,7 @@ La plupart des paramètres d'export peuvent également être configurés depuis 
 2. Configurer chaque destination dans les onglets dédiés
 3. Tester la connexion avant d'activer
 
-Les configurations sauvegardées via l'interface sont stockées dans la table `export_configs` de PostgreSQL et **prennent le pas** sur les variables d'environnement.
+Les configurations sauvegardées via l'interface sont stockées dans la table `export_configs` de la base locale et **prennent le pas** sur les variables d'environnement.
 
 ---
 

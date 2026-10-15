@@ -43,9 +43,10 @@ secrets:
     clientSecret:
       value: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
+# Base SQLite sur le volume du backend (recommandé pour une nouvelle installation).
+# Pour PostgreSQL, voir « Base de données » plus bas.
 postgres:
-  auth:
-    password: "motdepasse-securise"
+  enabled: false
 
 ingress:
   enabled: true
@@ -98,7 +99,8 @@ kubectl get pods -l app.kubernetes.io/instance=myelectricaldata
 │         ┌─────────┼─────────┐                          │
 │         │         │         │                          │
 │  ┌──────▼───┐ ┌───▼────────┐                           │
-│  │PostgreSQL│ │VictoriaM.  │                           │
+│  │ SQLite / │ │VictoriaM.  │                           │
+│  │PostgreSQL│ │            │                           │
 │  └──────────┘ └────────────┘                           │
 └────────────────────────────────────────────────────────┘
 ```
@@ -123,7 +125,38 @@ secrets:
       value: "xxx"
 ```
 
-### PostgreSQL
+### Base de données
+
+Trois choix, selon `postgres.enabled` et `externalDatabase` :
+
+| Valeurs | Base | Remarques |
+|---------|------|-----------|
+| `postgres.enabled: false`, `externalDatabase` vide | **SQLite** dans `/app/data` (PVC du backend) | Recommandé pour une nouvelle installation : pas de pod de base de données |
+| `postgres.enabled: true` (défaut du chart) | PostgreSQL 16 embarqué (sous-chart) | Mot de passe requis |
+| `postgres.enabled: false`, `externalDatabase.host` renseigné | Serveur PostgreSQL existant | Mot de passe ou `existingSecret` requis |
+
+Changer de base ne déplace pas les données : la nouvelle repart vide et se resynchronise depuis la passerelle.
+
+#### SQLite
+
+```yaml
+postgres:
+  enabled: false
+
+backend:
+  replicaCount: 1        # SQLite n'accepte qu'un seul pod écrivain
+  persistence:
+    enabled: true        # la base vit sur ce volume
+    size: 5Gi
+```
+
+Le chart passe alors le déploiement du backend en stratégie `Recreate` (l'ancien pod s'arrête avant que le nouveau démarre, le volume étant en `ReadWriteOnce`) et refuse le rendu avec plusieurs réplicas, l'autoscaling, ou sans persistance.
+
+:::warning Désinstallation
+Le PVC du backend n'est pas conservé par `helm uninstall` : sauvegardez la base avant (voir [Sauvegarde SQLite](./docker.md#sqlite), commandes à passer par `kubectl exec` et `kubectl cp`).
+:::
+
+#### PostgreSQL embarqué
 
 ```yaml
 postgres:
