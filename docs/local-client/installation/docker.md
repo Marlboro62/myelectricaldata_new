@@ -48,8 +48,10 @@ MED_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # === RECOMMANDÉ (avant le premier démarrage) ===
 # Mot de passe de la base PostgreSQL embarquée
 POSTGRES_PASSWORD=un-mot-de-passe-solide
-# Clé de signature des sessions
-SECRET_KEY=une-cle-aleatoire
+# Clé de signature des sessions, à générer :
+#   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Vide : clé aléatoire à chaque démarrage (sessions perdues au redémarrage)
+SECRET_KEY=
 
 # === OPTIONNEL ===
 TZ=Europe/Paris
