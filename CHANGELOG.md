@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.5.6](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.5...2.5.6) (2026-10-15)
+
+### Bug Fixes
+
+* **api:** MED-43 / servir le jour récent partiel quand Enedis renvoie vide ([8ff0e7c](https://github.com/MyElectricalData/myelectricaldata_new/commit/8ff0e7c1b1232b06458a886a73205520413c4760))
+
 ## [2.5.5](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.4...2.5.5) (2026-10-15)
 
 ### Bug Fixes
