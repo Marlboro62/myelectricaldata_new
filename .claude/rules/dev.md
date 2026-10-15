@@ -21,7 +21,7 @@ globs:
 
 | Fichier                              | Usage                  | Services inclus                                         |
 | ------------------------------------ | ---------------------- | ------------------------------------------------------- |
-| `docker-compose.yml` (racine)        | **Production Client**  | Backend, Frontend uniquement (images GHCR)              |
+| `docker-compose.yml` (racine)        | **Production Client**  | PostgreSQL, Backend, Frontend (images GHCR, `.env`)     |
 | `docker-compose.server.yml` (racine) | **Production Serveur** | Backend, Frontend uniquement (images GHCR)              |
 | `dev/docker-compose.yml`             | Developpement Client   | Backend, Frontend, PostgreSQL, VictoriaMetrics, pgAdmin |
 | `dev/docker-compose.server.yml`      | Developpement Serveur  | Backend, Frontend, PostgreSQL, Valkey, pgAdmin, Docs    |
