@@ -1,6 +1,6 @@
 """Client Mode Models
 
-These models are used exclusively in CLIENT_MODE to store data permanently in PostgreSQL.
+These models are used exclusively in CLIENT_MODE to store data permanently in PostgreSQL or SQLite.
 In server mode, data is cached temporarily in Valkey.
 
 Models:
@@ -21,18 +21,35 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Date,
-    DateTime,
     Float,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, TZDateTime
+
+
+def daily_unique_index(table: str) -> Index:
+    """Unicité des lignes quotidiennes (interval_start NULL) sous SQLite (MED-65).
+
+    SQLite n'a pas NULLS NOT DISTINCT : deux NULL n'y entrent jamais en conflit, et un upsert
+    quotidien insérerait une seconde ligne. Index partiel créé sous SQLite seulement ; PostgreSQL
+    garde sa contrainte uq_<table> NULLS NOT DISTINCT.
+    """
+    return Index(
+        f"uq_{table}_daily",
+        "usage_point_id",
+        "date",
+        "granularity",
+        unique=True,
+        sqlite_where=text("interval_start IS NULL"),
+    ).ddl_if(dialect="sqlite")
 
 
 class DataGranularity(str, enum.Enum):
@@ -55,6 +72,7 @@ class ConsumptionData(Base, TimestampMixin):
         UniqueConstraint("usage_point_id", "date", "granularity", "interval_start", name="uq_consumption_data", postgresql_nulls_not_distinct=True),
         Index("ix_consumption_usage_point_date", "usage_point_id", "date"),
         Index("ix_consumption_granularity_date", "granularity", "date"),
+        daily_unique_index("consumption_data"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -91,6 +109,7 @@ class ProductionData(Base, TimestampMixin):
         UniqueConstraint("usage_point_id", "date", "granularity", "interval_start", name="uq_production_data", postgresql_nulls_not_distinct=True),
         Index("ix_production_usage_point_date", "usage_point_id", "date"),
         Index("ix_production_granularity_date", "granularity", "date"),
+        daily_unique_index("production_data"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -189,8 +208,8 @@ class SyncStatus(Base, TimestampMixin):
     )
 
     # Sync progress
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
+    next_sync_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     # Data range available
     oldest_data_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -203,7 +222,7 @@ class SyncStatus(Base, TimestampMixin):
     # Error tracking
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     def __repr__(self) -> str:
         return f"<SyncStatus({self.usage_point_id}, {self.data_type}, {self.granularity.value}, {self.status.value})>"
@@ -253,10 +272,10 @@ class ExportConfig(Base, TimestampMixin):
 
     # Scheduling (NULL = manual only, 0 = disabled)
     export_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
-    next_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_export_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     # Status tracking
-    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_export_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
     last_export_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     last_export_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     export_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -292,7 +311,7 @@ class ContractData(Base, TimestampMixin):
     raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Sync tracking
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     def __repr__(self) -> str:
         return f"<ContractData({self.usage_point_id}, {self.subscribed_power}kVA)>"
@@ -324,7 +343,7 @@ class AddressData(Base, TimestampMixin):
     raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Sync tracking
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
 
     def __repr__(self) -> str:
         return f"<AddressData({self.usage_point_id}, {self.city})>"

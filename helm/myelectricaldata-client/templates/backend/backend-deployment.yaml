@@ -9,6 +9,17 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.backend.replicaCount }}
   {{- end }}
+  {{- if include "myelectricaldata.sqlite.enabled" . }}
+  {{- if or .Values.autoscaling.enabled (gt (int .Values.backend.replicaCount) 1) }}
+  {{- fail "SQLite mode (postgres.enabled=false, no externalDatabase) supports a single backend replica" }}
+  {{- end }}
+  {{- if not .Values.backend.persistence.enabled }}
+  {{- fail "SQLite mode (postgres.enabled=false, no externalDatabase) needs backend.persistence.enabled: the database would be lost on every pod restart" }}
+  {{- end }}
+  # SQLite: one writer on a ReadWriteOnce volume, the old pod stops before the new one starts
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "myelectricaldata.backend.selectorLabels" . | nindent 6 }}
@@ -91,12 +102,14 @@ spec:
             - name: UV_CACHE_DIR
               value: "/tmp/uv-cache"
             {{- end }}
+            {{- if not (include "myelectricaldata.sqlite.enabled" .) }}
             # PostgreSQL password MUST be defined before DATABASE_URL for $(POSTGRES_PASSWORD) substitution
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "myelectricaldata.postgres.secretName" . | trim }}
                   key: {{ include "myelectricaldata.postgres.secretKey" . | trim }}
+            {{- end }}
             - name: DATABASE_URL
               value: {{ include "myelectricaldata.databaseUrl" . | quote }}
             # --- MyElectricalData API Credentials (Client Mode) ---

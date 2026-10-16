@@ -21,13 +21,13 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import bindparam, select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from ..models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData
 from ..models.pdl import PDL
 from .sync import MAX_DAILY_DAYS, MAX_DETAILED_DAYS
+from .upsert import dialect_insert, is_sqlite, sqlite_index_exists
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +44,21 @@ class V1SchemaError(Exception):
 
 
 class TargetDatabaseError(Exception):
-    """La base du client V2 ne garantit pas l'unicité des lignes journalières (PostgreSQL < 15)."""
+    """La base du client V2 ne garantit pas l'unicité des lignes journalières (PostgreSQL < 15, index SQLite absent)."""
 
 
 async def _check_target(db: AsyncSession) -> None:
     """Refuse PostgreSQL < 15 : sans NULLS NOT DISTINCT (migration 20260223), une ligne journalière
-    (`interval_start` NULL) n'entre jamais en conflit, et l'import la doublerait en silence."""
+    (`interval_start` NULL) n'entre jamais en conflit, et l'import la doublerait en silence.
+    Sous SQLite, ce sont les index partiels des lignes quotidiennes qui jouent ce rôle (MED-65)."""
+    if is_sqlite(db):
+        for table in ("consumption_data", "production_data"):
+            if not await sqlite_index_exists(db, f"uq_{table}_daily"):
+                raise TargetDatabaseError(
+                    f"Base SQLite sans l'index uq_{table}_daily : les journées déjà présentes seraient doublées "
+                    "(redémarrer le client pour compléter le schéma)"
+                )
+        return
     version = int((await db.execute(text("SHOW server_version_num"))).scalar_one())
     if version < 150000:
         raise TargetDatabaseError(
@@ -288,7 +297,9 @@ async def _insert(db: AsyncSession, model: type, constraint: str, rows: list[dic
     """INSERT … ON CONFLICT DO NOTHING par lots ; renvoie le nombre de lignes réellement ajoutées."""
     inserted = 0
     for i in range(0, len(rows), BATCH_SIZE):
-        stmt = pg_insert(model).values(rows[i:i + BATCH_SIZE]).on_conflict_do_nothing(constraint=constraint)
+        stmt = dialect_insert(db, model).values(rows[i:i + BATCH_SIZE])
+        # SQLite : DO NOTHING sans cible couvre toutes les unicités, index partiel des lignes quotidiennes compris
+        stmt = stmt.on_conflict_do_nothing() if is_sqlite(db) else stmt.on_conflict_do_nothing(constraint=constraint)
         result = await db.execute(stmt.returning(model.id))
         inserted += len(result.all())
     return inserted
