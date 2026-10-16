@@ -6,6 +6,7 @@ import { LoadingPlaceholder } from '@/components/LoadingPlaceholder'
 import { AnimatedSection } from '@/components/AnimatedSection'
 import { PeriodSelector } from '@/components/PeriodSelector'
 import { energyApi, type EnergyProvider, type EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
 import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import jsPDF from 'jspdf'
@@ -170,16 +171,9 @@ export default function Simulator() {
   // Ensure providersData is always an array
   const providersData = Array.isArray(providersDataRaw) ? providersDataRaw : []
 
+  // Inclure l'historique pour pouvoir afficher l'offre utilisateur même si périmée
   const { data: offersDataRaw, isLoading: offersLoading } = useQuery({
-    queryKey: ['energy-offers', 'with-history'],
-    queryFn: async () => {
-      // Inclure l'historique pour pouvoir afficher l'offre utilisateur même si périmée
-      const response = await energyApi.getOffers(undefined, true)
-      if (response.success && Array.isArray(response.data)) {
-        return response.data as EnergyOffer[]
-      }
-      return []
-    },
+    ...offersWithHistoryQueryOptions(),
     staleTime: 0, // Always refetch to ensure fresh data
   })
 

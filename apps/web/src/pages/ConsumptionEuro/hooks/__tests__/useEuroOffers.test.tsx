@@ -4,6 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { EnergyOffer, EnergyProvider } from '@/api/energy'
 import { energyApi } from '@/api/energy'
+import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
 import { useEuroOffers } from '../useEuroOffers'
 
 vi.mock('@/api/energy', () => ({
@@ -40,8 +41,10 @@ const ALL_OFFERS = [CLOSED_PDL_OFFER, CURRENT_OFFER, OTHER_CLOSED, OTHER_POWER]
 const isCurrentForApi = (o: EnergyOffer) =>
   o.is_active === true && (!o.valid_to || new Date(o.valid_to) >= new Date())
 
-function renderOffers(props: Parameters<typeof useEuroOffers>[0]) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderOffers(
+  props: Parameters<typeof useEuroOffers>[0],
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
@@ -51,6 +54,7 @@ function renderOffers(props: Parameters<typeof useEuroOffers>[0]) {
 // MED-67 : la page Consommation € doit retrouver l'offre du PDL même close
 describe('useEuroOffers : offre du PDL close', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.mocked(energyApi.getProviders).mockResolvedValue({ success: true, data: PROVIDERS, timestamp: '2026-10-16T12:00:00Z' })
     // Même filtre que GET /energy/offers : sans include_history, seules les offres en cours reviennent
     vi.mocked(energyApi.getOffers).mockImplementation(async (_providerId?: string, includeHistory?: boolean) => ({
@@ -97,5 +101,18 @@ describe('useEuroOffers : offre du PDL close', () => {
 
     await waitFor(() => expect(result.current.comparisonOfferWithProvider).not.toBeNull())
     expect(result.current.comparisonOfferWithProvider?.id).toBe(CURRENT_OFFER.id)
+  })
+
+  // Revue croisée Codex : la clé est partagée avec le Simulateur, OfferSelector et la contribution
+  it('relit le cache des offres rempli par une autre page, sans refaire la requête', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    queryClient.setQueryData(offersWithHistoryQueryOptions().queryKey, ALL_OFFERS)
+    vi.mocked(energyApi.getOffers).mockRejectedValue(new Error('API injoignable'))
+
+    const { result } = renderOffers({ selectedOfferId: CLOSED_PDL_OFFER.id, comparisonOfferId: null }, queryClient)
+
+    await waitFor(() => expect(result.current.selectedOfferWithProvider).not.toBeNull())
+    expect(result.current.selectedOfferWithProvider?.id).toBe(CLOSED_PDL_OFFER.id)
+    expect(energyApi.getOffers).not.toHaveBeenCalled()
   })
 })

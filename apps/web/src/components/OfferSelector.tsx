@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Building2, Zap, Tag, X, AlertTriangle, Loader2, ChevronDown, Search } from 'lucide-react'
 import { energyApi, EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
 import { isOfferExpired } from '@/utils/offers'
 
 interface OfferSelectorProps {
@@ -65,9 +66,8 @@ export default function OfferSelector({
   })
 
   // Fetch all offers (incluant les offres périmées pour permettre leur sélection)
-  const { data: offersResponse, isLoading: isLoadingOffers, isFetching: isFetchingOffers } = useQuery({
-    queryKey: ['energy-offers', 'with-history'],
-    queryFn: () => energyApi.getOffers(undefined, true),
+  const { data: offersData, isLoading: isLoadingOffers, isFetching: isFetchingOffers } = useQuery({
+    ...offersWithHistoryQueryOptions(),
     staleTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     placeholderData: keepPreviousData,
@@ -75,7 +75,7 @@ export default function OfferSelector({
 
   // Stabilize providers and offers arrays
   const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
-  const allOffers = useMemo(() => offersResponse?.data || [], [offersResponse?.data])
+  const allOffers = useMemo(() => offersData || [], [offersData])
 
   // Find selected offer details
   const selectedOffer = useMemo(() => {
