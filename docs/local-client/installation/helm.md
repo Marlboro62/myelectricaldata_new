@@ -152,8 +152,8 @@ backend:
 
 Le chart passe alors le déploiement du backend en stratégie `Recreate` (l'ancien pod s'arrête avant que le nouveau démarre, le volume étant en `ReadWriteOnce`) et refuse le rendu avec plusieurs réplicas, l'autoscaling, ou sans persistance.
 
-:::warning Désinstallation
-Le PVC du backend n'est pas conservé par `helm uninstall` : sauvegardez la base avant (voir [Sauvegarde SQLite](./docker.md#sqlite), commandes à passer par `kubectl exec` et `kubectl cp`).
+:::info Désinstallation
+En mode SQLite, le PVC du backend porte `helm.sh/resource-policy: keep`, comme celui de PostgreSQL : `helm uninstall` le laisse en place et une réinstallation sous le même nom de release le reprend. Pour effacer les données, supprimez-le à la main (`kubectl delete pvc <release>-myelectricaldata-client-backend`). Sauvegarde : voir [Sauvegarde SQLite](./docker.md#sqlite), commandes à passer par `kubectl exec` et `kubectl cp`.
 :::
 
 #### PostgreSQL embarqué
