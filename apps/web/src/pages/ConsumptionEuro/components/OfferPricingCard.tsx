@@ -1,5 +1,6 @@
 import { Tag, ArrowLeftRight, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import type { SelectedOfferWithProvider } from '../types/euro.types'
 
 interface EnergyOffer {
@@ -127,6 +128,15 @@ export function OfferPricingCard({
                 {selectedOffer.valid_to
                   ? `Offre close depuis le ${new Date(selectedOffer.valid_to).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}`
                   : 'Offre close'}
+                {' · '}
+                {/* The PDL's offer is changed from its card on the dashboard */}
+                <Link
+                  to="/dashboard"
+                  onClick={(e) => e.stopPropagation()}
+                  className="underline hover:text-amber-900 dark:hover:text-amber-100"
+                >
+                  changer d'offre
+                </Link>
               </span>
             )}
           </div>
