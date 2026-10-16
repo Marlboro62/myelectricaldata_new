@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.9.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.1...2.9.0) (2026-10-16)
+
+### Features
+
+* **web:** MED-67 / lien « changer d'offre » dans le badge d'offre close ([f3b5b64](https://github.com/MyElectricalData/myelectricaldata_new/commit/f3b5b647b84da3cb50ea0ba4d1a8cb1c953c4070))
+
+### Bug Fixes
+
+* **web:** MED-67 / Consommation € retrouve l'offre du PDL même close ([f2dc283](https://github.com/MyElectricalData/myelectricaldata_new/commit/f2dc28343ee2a11e9e57679266f9137b6573c71e))
+* **web:** MED-67 / une seule définition de la requête des fournisseurs ([e75db23](https://github.com/MyElectricalData/myelectricaldata_new/commit/e75db235308c7170e2d05083ad4964dd99020632))
+* **web:** MED-67 / une seule définition de la requête des offres avec historique ([c28544b](https://github.com/MyElectricalData/myelectricaldata_new/commit/c28544b479cbfd1172a8185cc63b46affad53849))
+
 ## [2.8.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.0...2.8.1) (2026-10-16)
 
 ### Bug Fixes
