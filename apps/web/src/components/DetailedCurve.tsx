@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { logger } from '@/utils/logger'
 import { useResponsiveDayCount } from '@/hooks/useResponsiveDayCount'
 import { getIntervalLength, getReadings, getUnit, hasReadings, resamplePowerKw } from '@/utils/enedisMeasure'
+import { detailCalendarStart } from '@/utils/historyRange'
 
 /**
  * Composant de bouton moderne réutilisable
@@ -461,6 +462,15 @@ export function DetailedCurve({
     const startingDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
 
+    // Fenêtre Enedis (2 ans), élargie jusqu'à la donnée locale la plus ancienne quand la courbe remonte plus loin (MED-64)
+    const twoYearsAgoUTC = new Date(Date.UTC(
+      yesterdayUTC.getUTCFullYear() - 2,
+      yesterdayUTC.getUTCMonth(),
+      yesterdayUTC.getUTCDate(),
+      0, 0, 0, 0
+    ))
+    const calendarStartUTC = detailCalendarStart(twoYearsAgoUTC, availableDatesSet)
+
     const calendarDays = []
     const totalCells = Math.ceil((startingDayOfWeek + daysInMonth) / 7) * 7
 
@@ -469,13 +479,7 @@ export function DetailedCurve({
       const isValidDay = dayNumber > 0 && dayNumber <= daysInMonth
       const dayDate = isValidDay ? new Date(Date.UTC(currentYear, currentMonth, dayNumber, 0, 0, 0, 0)) : null
 
-      const twoYearsAgoUTC = new Date(Date.UTC(
-        yesterdayUTC.getUTCFullYear() - 2,
-        yesterdayUTC.getUTCMonth(),
-        yesterdayUTC.getUTCDate(),
-        0, 0, 0, 0
-      ))
-      const isInRange = dayDate && dayDate <= yesterdayUTC && dayDate >= twoYearsAgoUTC
+      const isInRange = dayDate && dayDate <= yesterdayUTC && dayDate >= calendarStartUTC
 
       // Check if data exists for this day
       let hasData = false

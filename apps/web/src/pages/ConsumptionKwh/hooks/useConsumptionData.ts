@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { pdlApi } from '@/api/pdl'
 import { enedisApi } from '@/api/enedis'
 import { resolveHistoryStart } from '@/utils/localSyncStatus'
+import { splitYearlyChunks } from '@/utils/historyRange'
 import type { PDL, APIResponse, EnedisMeasure, MeasureReading } from '@/types/api'
 import { buildMeasure, getIntervalLength, getReadings, getUnit } from '@/utils/enedisMeasure'
 import type { DateRange } from '../types/consumption.types'
@@ -59,34 +60,8 @@ export function useConsumptionData(selectedPDL: string, dateRange: DateRange | n
         })
       }
 
-      // Split into yearly chunks (max 365 days per call)
-      const yearlyChunks: { start: string; end: string }[] = []
-      let currentStart = new Date(startDate)
-
-      while (currentStart <= endDate) {
-        // Calculate end of this chunk (1 year or less)
-        let currentEnd = new Date(currentStart)
-        currentEnd.setUTCFullYear(currentEnd.getUTCFullYear() + 1)
-        currentEnd.setUTCDate(currentEnd.getUTCDate() - 1) // 365 days max
-
-        // Cap to overall end date if needed
-        if (currentEnd > endDate) {
-          currentEnd = new Date(endDate)
-        }
-
-        const chunkStart = currentStart.getUTCFullYear() + '-' +
-                          String(currentStart.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                          String(currentStart.getUTCDate()).padStart(2, '0')
-        const chunkEnd = currentEnd.getUTCFullYear() + '-' +
-                        String(currentEnd.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                        String(currentEnd.getUTCDate()).padStart(2, '0')
-
-        yearlyChunks.push({ start: chunkStart, end: chunkEnd })
-
-        // Move to next chunk (day after current end)
-        currentStart = new Date(currentEnd)
-        currentStart.setUTCDate(currentStart.getUTCDate() + 1)
-      }
+      // Morceaux de 365 jours à frontière partagée : la fin de chaque appel est exclue par l'API (MED-64)
+      const yearlyChunks = splitYearlyChunks(start, dateRange.end)
 
       // Fetch all chunks in parallel
       const chunkPromises = yearlyChunks.map(chunk =>
@@ -160,34 +135,8 @@ export function useConsumptionData(selectedPDL: string, dateRange: DateRange | n
         })
       }
 
-      // Split into yearly chunks (max 365 days per call)
-      const yearlyChunks: { start: string; end: string }[] = []
-      let currentStart = new Date(startDate)
-
-      while (currentStart <= endDate) {
-        // Calculate end of this chunk (1 year or less)
-        let currentEnd = new Date(currentStart)
-        currentEnd.setUTCFullYear(currentEnd.getUTCFullYear() + 1)
-        currentEnd.setUTCDate(currentEnd.getUTCDate() - 1) // 365 days max
-
-        // Cap to overall end date if needed
-        if (currentEnd > endDate) {
-          currentEnd = new Date(endDate)
-        }
-
-        const chunkStart = currentStart.getUTCFullYear() + '-' +
-                          String(currentStart.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                          String(currentStart.getUTCDate()).padStart(2, '0')
-        const chunkEnd = currentEnd.getUTCFullYear() + '-' +
-                        String(currentEnd.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                        String(currentEnd.getUTCDate()).padStart(2, '0')
-
-        yearlyChunks.push({ start: chunkStart, end: chunkEnd })
-
-        // Move to next chunk (day after current end)
-        currentStart = new Date(currentEnd)
-        currentStart.setUTCDate(currentStart.getUTCDate() + 1)
-      }
+      // Morceaux de 365 jours à frontière partagée : la fin de chaque appel est exclue par l'API (MED-64)
+      const yearlyChunks = splitYearlyChunks(start, dateRange.end)
 
       // Fetch all chunks in parallel
       const chunkPromises = yearlyChunks.map(chunk =>

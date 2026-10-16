@@ -51,11 +51,13 @@ export function formatHistoryDepth(start: string, end: string): string {
  * l'historique en contient, sans plafond. Pas d'un an calendaire (pas de 365 jours, qui dérivent
  * d'un jour par année bissextile et finissent par donner deux périodes de même année de fin).
  * Bornes incluses et disjointes : chaque période commence juste après la fin de la précédente.
+ * Calcul en UTC : les dates journalières sont à minuit UTC, et un pas en heure locale décalerait la borne
+ * d'une heure quand l'état de l'heure d'été diffère d'une année à l'autre (un jour changerait de période).
  */
 export function rollingYearPeriods(mostRecent: Date, oldest: Date): Array<{ start: Date; end: Date }> {
   const yearsBack = (years: number) => {
     const date = new Date(mostRecent)
-    date.setFullYear(mostRecent.getFullYear() - years)
+    date.setUTCFullYear(mostRecent.getUTCFullYear() - years)
     return date
   }
   const periods: Array<{ start: Date; end: Date }> = []
@@ -63,4 +65,40 @@ export function rollingYearPeriods(mostRecent: Date, oldest: Date): Array<{ star
     periods.push({ start: new Date(yearsBack(i + 1).getTime() + 1), end: yearsBack(i) })
   }
   return periods
+}
+
+const isoDay = (date: Date) => date.toISOString().slice(0, 10)
+
+/**
+ * Morceaux de 365 jours au plus d'une plage [start, end[ (YYYY-MM-DD) pour les appels journaliers.
+ * La fin de chaque appel est exclue par l'API (client local comme passerelle, comme dateFin Enedis) :
+ * chaque morceau commence donc là où finit le précédent. Une fin incluse (`end - 1 jour`, puis le
+ * suivant à `end + 1 jour`) perdrait un jour à chaque frontière.
+ */
+export function splitYearlyChunks(start: string, end: string): Array<{ start: string; end: string }> {
+  const endMs = Date.parse(end)
+  if (!(Date.parse(start) < endMs)) return [{ start, end }]
+  const chunks: Array<{ start: string; end: string }> = []
+  let current = new Date(start)
+  while (current.getTime() < endMs) {
+    const next = new Date(current.getTime() + 365 * DAY_MS)
+    const chunkEnd = next.getTime() < endMs ? next : new Date(endMs)
+    chunks.push({ start: isoDay(current), end: isoDay(chunkEnd) })
+    current = chunkEnd
+  }
+  return chunks
+}
+
+/**
+ * Premier jour sélectionnable dans le calendrier de la courbe de charge : la fenêtre Enedis (2 ans), ou la
+ * donnée locale la plus ancienne quand la courbe en cache remonte plus loin (import V1, mode client).
+ */
+export function detailCalendarStart(windowStart: Date, availableDates: Iterable<string>): Date {
+  let oldest: string | null = null
+  for (const day of availableDates) {
+    if (ISO_DATE.test(day) && (oldest === null || day < oldest)) oldest = day
+  }
+  if (oldest === null) return windowStart
+  const oldestDate = new Date(oldest)
+  return oldestDate < windowStart ? oldestDate : windowStart
 }

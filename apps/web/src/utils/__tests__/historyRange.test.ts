@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { historyStartDate, oldestLocalDate, formatHistoryDepth, rollingYearPeriods } from '../historyRange'
+import {
+  historyStartDate,
+  oldestLocalDate,
+  formatHistoryDepth,
+  rollingYearPeriods,
+  splitYearlyChunks,
+  detailCalendarStart,
+} from '../historyRange'
 
 // MED-64 : l'historique demandé part de la donnée locale la plus ancienne, jamais moins que la fenêtre Enedis
 describe('historyStartDate', () => {
@@ -82,5 +89,61 @@ describe('rollingYearPeriods', () => {
     const years = rollingYearPeriods(new Date(2026, 11, 31), new Date(2019, 0, 1)).map((p) => p.end.getFullYear())
 
     expect(new Set(years).size).toBe(years.length)
+  })
+
+  it('bornes à minuit UTC quel que soit l état de l heure d été (dates journalières)', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000
+    const periods = rollingYearPeriods(new Date('2026-10-26'), new Date('2020-01-01'))
+
+    periods.forEach((p) => expect(p.end.getTime() % DAY_MS).toBe(0))
+    expect(periods[1].end.toISOString()).toBe('2025-10-26T00:00:00.000Z')
+  })
+})
+
+// MED-64 : les appels journaliers excluent leur fin (client local et passerelle) : les morceaux se touchent
+describe('splitYearlyChunks', () => {
+  const days = (start: string, end: string) => {
+    const out: string[] = []
+    for (let t = Date.parse(start); t < Date.parse(end); t += 24 * 60 * 60 * 1000) out.push(new Date(t).toISOString().slice(0, 10))
+    return out
+  }
+
+  it('couvre chaque jour de [start, end[ une seule fois, 29 février compris', () => {
+    const chunks = splitYearlyChunks('2019-03-01', '2026-10-16')
+    const covered = chunks.flatMap((c) => days(c.start, c.end))
+
+    expect(chunks[0].start).toBe('2019-03-01')
+    expect(chunks[chunks.length - 1].end).toBe('2026-10-16')
+    chunks.slice(1).forEach((c, i) => expect(c.start).toBe(chunks[i].end))
+    expect(covered).toEqual(days('2019-03-01', '2026-10-16'))
+    expect(covered).toContain('2020-02-29')
+  })
+
+  it('365 jours au plus par morceau', () => {
+    splitYearlyChunks('2019-03-01', '2026-10-16').forEach((c) => expect(days(c.start, c.end).length).toBeLessThanOrEqual(365))
+  })
+
+  it('plage courte, vide ou inversée : un seul morceau tel quel', () => {
+    expect(splitYearlyChunks('2026-01-01', '2026-10-16')).toEqual([{ start: '2026-01-01', end: '2026-10-16' }])
+    expect(splitYearlyChunks('2026-10-16', '2026-10-16')).toEqual([{ start: '2026-10-16', end: '2026-10-16' }])
+    expect(splitYearlyChunks('2026-10-17', '2026-10-16')).toEqual([{ start: '2026-10-17', end: '2026-10-16' }])
+  })
+})
+
+// MED-64 : le calendrier de la courbe de charge ouvre jusqu à la donnée locale la plus ancienne
+describe('detailCalendarStart', () => {
+  const twoYearsAgo = new Date('2024-10-15')
+
+  it('sans donnée plus ancienne que la fenêtre Enedis : la fenêtre', () => {
+    expect(detailCalendarStart(twoYearsAgo, new Set())).toEqual(twoYearsAgo)
+    expect(detailCalendarStart(twoYearsAgo, new Set(['2025-03-01', '2026-10-14']))).toEqual(twoYearsAgo)
+  })
+
+  it('courbe importée plus ancienne : le premier jour disponible', () => {
+    expect(detailCalendarStart(twoYearsAgo, new Set(['2026-10-14', '2020-06-01', '2020-05-31']))).toEqual(new Date('2020-05-31'))
+  })
+
+  it('ignore une date illisible', () => {
+    expect(detailCalendarStart(twoYearsAgo, new Set(['n/a', '']))).toEqual(twoYearsAgo)
   })
 })

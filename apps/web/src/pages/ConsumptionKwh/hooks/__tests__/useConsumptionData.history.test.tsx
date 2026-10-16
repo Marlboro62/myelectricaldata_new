@@ -49,6 +49,19 @@ describe('useConsumptionData : historique local de plus de 3 ans', () => {
     expect(starts(enedisApi.getMaxPower)[0]).toBe('2019-03-02')
   })
 
+  it('les morceaux annuels se touchent (fin exclue par l API) : aucun jour perdu à leurs frontières', async () => {
+    syncApi.getStatusPdl.mockResolvedValue({ sync_types: { consumption_daily: { oldest_data_date: '2019-03-01' } } })
+
+    render()
+
+    await waitFor(() => expect(enedisApi.getConsumptionDaily.mock.calls.length).toBeGreaterThan(1))
+    const ranges = (enedisApi.getConsumptionDaily.mock.calls as unknown[][])
+      .map((call) => call[1] as { start: string; end: string })
+      .sort((a, b) => a.start.localeCompare(b.start))
+    ranges.slice(1).forEach((r, i) => expect(r.start).toBe(ranges[i].end))
+    expect(ranges[ranges.length - 1].end).toBe(WINDOW.end)
+  })
+
   it('statut de synchro indisponible : la fenêtre de la page', async () => {
     syncApi.getStatusPdl.mockRejectedValue(new Error('500'))
 

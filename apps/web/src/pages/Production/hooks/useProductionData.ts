@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { pdlApi } from '@/api/pdl'
 import { enedisApi } from '@/api/enedis'
 import { resolveHistoryStart } from '@/utils/localSyncStatus'
+import { splitYearlyChunks } from '@/utils/historyRange'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import { buildMeasure, getReadings, getUnit } from '@/utils/enedisMeasure'
 import type { DateRange } from '../types/production.types'
@@ -56,31 +57,8 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
         })
       }
 
-      // Split into yearly chunks (max 365 days per call)
-      const yearlyChunks: { start: string; end: string }[] = []
-      let currentStart = new Date(startDate)
-
-      while (currentStart <= endDate) {
-        let currentEnd = new Date(currentStart)
-        currentEnd.setUTCFullYear(currentEnd.getUTCFullYear() + 1)
-        currentEnd.setUTCDate(currentEnd.getUTCDate() - 1)
-
-        if (currentEnd > endDate) {
-          currentEnd = new Date(endDate)
-        }
-
-        const chunkStart = currentStart.getUTCFullYear() + '-' +
-                          String(currentStart.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                          String(currentStart.getUTCDate()).padStart(2, '0')
-        const chunkEnd = currentEnd.getUTCFullYear() + '-' +
-                        String(currentEnd.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                        String(currentEnd.getUTCDate()).padStart(2, '0')
-
-        yearlyChunks.push({ start: chunkStart, end: chunkEnd })
-
-        currentStart = new Date(currentEnd)
-        currentStart.setUTCDate(currentStart.getUTCDate() + 1)
-      }
+      // Morceaux de 365 jours à frontière partagée : la fin de chaque appel est exclue par l'API (MED-64)
+      const yearlyChunks = splitYearlyChunks(start, dateRange.end)
 
       // Fetch all chunks in parallel
       const chunkPromises = yearlyChunks.map(chunk =>
