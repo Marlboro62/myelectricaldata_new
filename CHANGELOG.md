@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.0...2.8.1) (2026-10-16)
+
+### Bug Fixes
+
+* **api:** MED-64 / l import V1 elargit les bornes des statuts de synchro ([b16fd0a](https://github.com/MyElectricalData/myelectricaldata_new/commit/b16fd0a5a3fbf123b5d350569b35f63de3454d10))
+* **api:** MED-64 / ne combler via la passerelle que les trous de sa fenetre ([b041085](https://github.com/MyElectricalData/myelectricaldata_new/commit/b041085c9a954854232488b7f119dc28cbc47467))
+* **web:** MED-64 / afficher toutes les annees disponibles dans les agregats ([af18400](https://github.com/MyElectricalData/myelectricaldata_new/commit/af18400bfc78ad972098ef64b59a289058b977e0))
+* **web:** MED-64 / demander tout l historique local au lieu de 3 ans ([d4df0d2](https://github.com/MyElectricalData/myelectricaldata_new/commit/d4df0d2fc2e02fdf7f5e7137d65afccc7694f2af))
+* **web:** MED-64 / libelles de profondeur selon la plage chargee ([7a13b61](https://github.com/MyElectricalData/myelectricaldata_new/commit/7a13b615cd92cf42261bd7cf3ad6d8edecba3d4e))
+* **web:** MED-64 / morceaux journaliers a fin incluse, sans chevauchement ([154cd11](https://github.com/MyElectricalData/myelectricaldata_new/commit/154cd112b6ef8342892dc1d1aa990ff3a90b33f5))
+* **web:** MED-64 / morceaux journaliers contigus, calendrier de la courbe et periodes en UTC ([183cba4](https://github.com/MyElectricalData/myelectricaldata_new/commit/183cba42e65f6083337225d35481dd7682170761))
+
 ## [2.8.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.1...2.8.0) (2026-10-16)
 
 ### Features
