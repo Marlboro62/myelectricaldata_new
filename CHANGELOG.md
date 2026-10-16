@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.8.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.1...2.8.0) (2026-10-16)
+
+### Features
+
+* **api:** MED-65 / client local sur SQLite ([65ca4bc](https://github.com/MyElectricalData/myelectricaldata_new/commit/65ca4bc9aeaaa4e0ada0fd82a96484e81e027e11))
+* **docker:** MED-65 / compose client sur SQLite, sans service PostgreSQL ([4594dc2](https://github.com/MyElectricalData/myelectricaldata_new/commit/4594dc2b050472aab5ea336ca537f134bd11b2f2))
+* **helm:** MED-65 / client sur SQLite quand aucune base PostgreSQL n'est configurée ([f4a548c](https://github.com/MyElectricalData/myelectricaldata_new/commit/f4a548cb17f1e72b51b3e056d196f8b18e99e3d9))
+* **helm:** MED-65 / refuser le mode SQLite sans persistance du backend ([460c920](https://github.com/MyElectricalData/myelectricaldata_new/commit/460c920b2773077b4df291a5404d030ece37b592))
+
+### Bug Fixes
+
+* **api:** MED-65 / amorcage SQLite rejouable apres un premier demarrage interrompu ([c1505fa](https://github.com/MyElectricalData/myelectricaldata_new/commit/c1505fa6d1c9cebbbc03e58435db435d162f3a72))
+* **helm:** MED-65 / garder le PVC du backend a la desinstallation en mode SQLite ([6863da0](https://github.com/MyElectricalData/myelectricaldata_new/commit/6863da0a923c2030c880d09b4564a66ed240c90b))
+
 ## [2.7.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.0...2.7.1) (2026-10-15)
 
 ### Bug Fixes
