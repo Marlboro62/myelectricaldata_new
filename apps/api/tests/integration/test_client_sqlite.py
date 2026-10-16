@@ -320,3 +320,21 @@ async def test_import_v1(session, tmp_path):
     again = await run_import(to_source_url(v1), session)
     assert again.inserted == {"consumption_data": 0, "production_data": 0, "max_power_data": 0}
     assert await _count(session, ConsumptionData) == 50
+
+
+async def test_import_v1_elargit_les_bornes_de_synchro(session, tmp_path):
+    """MED-64 : le front borne l'historique par oldest_data_date, juste dès l'import, sur les deux dialectes."""
+    v1 = str(V1Cache(tmp_path / "cache.db").usage_point(PDL)
+             .daily(PDL, date(2019, 3, 1), 12000).daily(PDL, date(2020, 1, 6), 13000)
+             .detail_day(PDL, date(2019, 3, 2))
+             .max_power(PDL, date(2019, 3, 1), 6100, datetime(2019, 3, 1, 18, 42))
+             .close())
+
+    await run_import(to_source_url(v1), session)
+    await session.commit()
+
+    rows = (await session.execute(select(SyncStatus).where(SyncStatus.usage_point_id == PDL))).scalars().all()
+    bounds = {(r.data_type, r.granularity): (r.oldest_data_date, r.newest_data_date) for r in rows}
+    assert bounds[("consumption", DataGranularity.DAILY)] == (date(2019, 3, 1), date(2020, 1, 6))
+    assert bounds[("consumption", DataGranularity.DETAILED)] == (date(2019, 3, 2), date(2019, 3, 2))
+    assert bounds[("max_power", DataGranularity.DAILY)] == (date(2019, 3, 1), date(2019, 3, 1))

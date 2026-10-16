@@ -180,6 +180,21 @@ docker compose -f docker-compose.sqlite.yml exec backend \
 
 La base V1 doit être joignable depuis le conteneur backend de la V2. MySQL n'est pas pris en charge.
 
+### Afficher l'historique importé
+
+Rechargez les pages Consommation et Production après l'import : elles affichent tout l'historique de
+la base locale, au-delà des 3 ans de journalier et des 2 ans de courbe de charge que la V2 sait
+redemander à Enedis. Chaque année importée a sa carte, sa barre et sa courbe annuelle, ses heures
+creuses et heures pleines, et sa puissance maximale. La passerelle n'est interrogée que dans sa
+fenêtre, pour combler les trous récents : les années V1 viennent toutes de la base locale.
+
+L'import met à jour la date de la donnée la plus ancienne de chaque PDL, ce qui suffit à étendre
+l'affichage. Un import fait avec une version antérieure est pris en compte à la prochaine
+synchronisation, ou en relançant la commande (elle n'écrit alors rien de neuf).
+
+La page Consommation (€) reste sur les 2 dernières années : elle chiffre la consommation au tarif
+de l'offre actuelle et ne dispose des jours Tempo que sur cette période.
+
 ## Étape 4 : basculer les exports
 
 :::warning Arrêtez la V1 avant d'activer les exports V2

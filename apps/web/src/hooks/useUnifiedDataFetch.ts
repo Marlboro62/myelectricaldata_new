@@ -7,6 +7,8 @@ import { toast } from '@/stores/notificationStore'
 import type { MeasureReading, PDL } from '@/types/api'
 import { useDataFetchStore } from '@/stores/dataFetchStore'
 import { useCacheBroadcast } from './useCacheBroadcast'
+import { historyStartDate, oldestLocalDate, type LocalSyncStatus } from '@/utils/historyRange'
+import { loadLocalSyncStatus } from '@/utils/localSyncStatus'
 
 interface UseUnifiedDataFetchParams {
   selectedPDL: string
@@ -15,6 +17,7 @@ interface UseUnifiedDataFetchParams {
   /** Context de la page pour déterminer quelles données récupérer */
   pageContext: 'consumption' | 'production' | 'all'
 }
+
 
 export function useUnifiedDataFetch({
   selectedPDL,
@@ -76,6 +79,13 @@ export function useUnifiedDataFetch({
     const startDate3y = formatDate(threeYearsAgo)
     const startDate2y = formatDate(twoYearsAgo)
 
+    // Un seul statut de synchro par PDL et par chargement (conso et production peuvent partager le PDL)
+    const syncStatuses = new Map<string, Promise<LocalSyncStatus | null>>()
+    const localStatus = (usagePointId: string) => {
+      if (!syncStatuses.has(usagePointId)) syncStatuses.set(usagePointId, loadLocalSyncStatus(usagePointId))
+      return syncStatuses.get(usagePointId)!
+    }
+
     logger.log('Starting unified data fetch:', {
       pdl: selectedPDL,
       pageContext,
@@ -98,18 +108,23 @@ export function useUnifiedDataFetch({
 
     // === CONSUMPTION DATA ===
     if (shouldFetchConsumption) {
+      const consumptionStatus = await localStatus(selectedPDL)
+      const consumptionDailyStart = historyStartDate(startDate3y, oldestLocalDate(consumptionStatus, 'consumption_daily'))
+      const maxPowerStart = historyStartDate(startDate3y, oldestLocalDate(consumptionStatus, 'max_power_daily'))
+      const consumptionDetailStart = historyStartDate(startDate2y, oldestLocalDate(consumptionStatus, 'consumption_detailed'))
+
       // Invalidate existing consumption queries
       queryClient.invalidateQueries({ queryKey: ['consumptionDaily', selectedPDL] })
       queryClient.invalidateQueries({ queryKey: ['maxPower', selectedPDL] })
 
-      // Fetch consumption daily data (3 years)
-      updateConsumptionStatus({ daily: 'loading' })
+      // Fetch consumption daily data (3 years, or all local history)
+      updateConsumptionStatus({ daily: 'loading', dailyRange: { start: consumptionDailyStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
-            logger.log(`Fetching consumption daily: ${startDate3y} → ${endDate}`)
+            logger.log(`Fetching consumption daily: ${consumptionDailyStart} → ${endDate}`)
             const dailyData = await enedisApi.getConsumptionDaily(selectedPDL, {
-              start: startDate3y,
+              start: consumptionDailyStart,
               end: endDate,
               use_cache: true,
             })
@@ -129,14 +144,14 @@ export function useUnifiedDataFetch({
         })()
       )
 
-      // Fetch max power data (3 years)
-      updateConsumptionStatus({ powerMax: 'loading' })
+      // Fetch max power data (3 years, or all local history)
+      updateConsumptionStatus({ powerMax: 'loading', powerMaxRange: { start: maxPowerStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
-            logger.log(`Fetching max power: ${startDate3y} → ${endDate}`)
+            logger.log(`Fetching max power: ${maxPowerStart} → ${endDate}`)
             const powerData = await enedisApi.getMaxPower(selectedPDL, {
-              start: startDate3y,
+              start: maxPowerStart,
               end: endDate,
               use_cache: true,
             })
@@ -156,14 +171,14 @@ export function useUnifiedDataFetch({
         })()
       )
 
-      // Fetch consumption detail batch (2 years)
-      updateConsumptionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 } })
+      // Fetch consumption detail batch (2 years, or all local history)
+      updateConsumptionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 }, detailRange: { start: consumptionDetailStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
-            logger.log(`Fetching consumption detail batch: ${startDate2y} → ${endDate}`)
+            logger.log(`Fetching consumption detail batch: ${consumptionDetailStart} → ${endDate}`)
             const batchData = await enedisApi.getConsumptionDetailBatch(selectedPDL, {
-              start: startDate2y,
+              start: consumptionDetailStart,
               end: endDate,
               use_cache: true,
             })
@@ -185,7 +200,7 @@ export function useUnifiedDataFetch({
                   grandeurMetier: 'CONS',
                   unite: getUnit(batchData.data) || 'W',
                   pas: getIntervalLength(batchData.data),
-                  start: startDate2y,
+                  start: consumptionDetailStart,
                   end: endDate,
                 })
               })
@@ -243,19 +258,23 @@ export function useUnifiedDataFetch({
       }
 
     if (productionPdlUsagePointId) {
+      const productionStatus = await localStatus(productionPdlUsagePointId)
+      const productionDailyStart = historyStartDate(startDate3y, oldestLocalDate(productionStatus, 'production_daily'))
+      const productionDetailStart = historyStartDate(startDate2y, oldestLocalDate(productionStatus, 'production_detailed'))
+
       logger.log(`Fetching production data for PDL: ${productionPdlUsagePointId}`)
 
       // Invalidate existing production queries
       queryClient.invalidateQueries({ queryKey: ['productionDaily', productionPdlUsagePointId] })
 
-      // Fetch production daily data (3 years)
-      updateProductionStatus({ daily: 'loading' })
+      // Fetch production daily data (3 years, or all local history)
+      updateProductionStatus({ daily: 'loading', dailyRange: { start: productionDailyStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
-            logger.log(`Fetching production daily: ${startDate3y} → ${endDate}`)
+            logger.log(`Fetching production daily: ${productionDailyStart} → ${endDate}`)
             const dailyData = await enedisApi.getProductionDaily(productionPdlUsagePointId, {
-              start: startDate3y,
+              start: productionDailyStart,
               end: endDate,
               use_cache: true,
             })
@@ -275,14 +294,14 @@ export function useUnifiedDataFetch({
         })()
       )
 
-      // Fetch production detail batch (2 years)
-      updateProductionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 } })
+      // Fetch production detail batch (2 years, or all local history)
+      updateProductionStatus({ detail: 'loading', detailProgress: { current: 0, total: 1 }, detailRange: { start: productionDetailStart, end: endDate } })
       fetchPromises.push(
         (async () => {
           try {
-            logger.log(`Fetching production detail batch: ${startDate2y} → ${endDate}`)
+            logger.log(`Fetching production detail batch: ${productionDetailStart} → ${endDate}`)
             const batchData = await enedisApi.getProductionDetailBatch(productionPdlUsagePointId, {
-              start: startDate2y,
+              start: productionDetailStart,
               end: endDate,
               use_cache: true,
             })
@@ -304,7 +323,7 @@ export function useUnifiedDataFetch({
                   grandeurMetier: 'PROD',
                   unite: getUnit(batchData.data) || 'W',
                   pas: getIntervalLength(batchData.data),
-                  start: startDate2y,
+                  start: productionDetailStart,
                   end: endDate,
                 })
               })

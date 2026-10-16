@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from ..models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData
+from ..models.client_mode import ConsumptionData, DataGranularity, MaxPowerData, ProductionData, SyncStatus
 from ..models.pdl import PDL
 from .sync import MAX_DAILY_DAYS, MAX_DETAILED_DAYS
 from .upsert import dialect_insert, is_sqlite, sqlite_index_exists
@@ -305,6 +305,43 @@ async def _insert(db: AsyncSession, model: type, constraint: str, rows: list[dic
     return inserted
 
 
+# Statuts de synchro dont l'import élargit les bornes : (modèle, data_type, granularité) comme la synchro
+SYNC_BOUNDS = (
+    (ConsumptionData, "consumption", DataGranularity.DAILY),
+    (ConsumptionData, "consumption", DataGranularity.DETAILED),
+    (ProductionData, "production", DataGranularity.DAILY),
+    (ProductionData, "production", DataGranularity.DETAILED),
+    (MaxPowerData, "max_power", DataGranularity.DAILY),
+)
+
+
+async def _widen_sync_bounds(db: AsyncSession, pdls: set[str]) -> None:
+    """Élargit oldest/newest_data_date des statuts de synchro aux données présentes en base (MED-64).
+
+    Le front borne l'historique demandé par oldest_data_date : sans cela, les années V1 n'apparaîtraient
+    qu'après la synchro suivante. Seules les bornes bougent, l'état de synchro reste celui de la V2.
+    """
+    for model, data_type, granularity in SYNC_BOUNDS:
+        query = select(model.usage_point_id, func.min(model.date), func.max(model.date)).where(
+            model.usage_point_id.in_(pdls)
+        )
+        if model is not MaxPowerData:
+            query = query.where(model.granularity == granularity)
+        rows = (await db.execute(query.group_by(model.usage_point_id))).all()
+        for usage_point_id, oldest, newest in rows:
+            status = (await db.execute(select(SyncStatus).where(
+                SyncStatus.usage_point_id == usage_point_id,
+                SyncStatus.data_type == data_type,
+                SyncStatus.granularity == granularity,
+            ))).scalar_one_or_none()
+            if status is None:
+                db.add(SyncStatus(usage_point_id=usage_point_id, data_type=data_type, granularity=granularity,
+                                  oldest_data_date=oldest, newest_data_date=newest))
+                continue
+            status.oldest_data_date = min(filter(None, (status.oldest_data_date, oldest)))
+            status.newest_data_date = max(filter(None, (status.newest_data_date, newest)))
+
+
 async def run_import(
     url: str, db: AsyncSession, *, pdls: list[str] | None = None, dry_run: bool = False, today: date | None = None
 ) -> ImportReport:
@@ -332,6 +369,8 @@ async def run_import(
             inserted = await _insert(db, model, constraint, [r for r in rows if not _covered(r, days)])
             report.inserted[model.__tablename__] = inserted
             report.present[model.__tablename__] = len(rows) - inserted
+        if not dry_run and known:
+            await _widen_sync_bounds(db, known)
     except Exception:
         await db.rollback()
         raise

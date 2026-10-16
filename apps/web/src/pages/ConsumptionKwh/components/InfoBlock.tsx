@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import { useAppMode } from '@/hooks/useAppMode'
 
 interface InfoBlockProps {
   isExpanded: boolean
@@ -6,6 +7,7 @@ interface InfoBlockProps {
 }
 
 export function InfoBlock({ isExpanded, onToggle }: InfoBlockProps) {
+  const { isClientMode } = useAppMode()
   return (
     <div className="mt-6 rounded-xl shadow-md border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 transition-colors duration-200">
       {/* Collapsible Header */}
@@ -56,10 +58,11 @@ export function InfoBlock({ isExpanded, onToggle }: InfoBlockProps) {
               </p>
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li>Les données sont récupérées depuis l'API <strong>Enedis Data Connect</strong></li>
-                <li>Données quotidiennes : <strong>1095 jours</strong> d'historique (3 ans)</li>
-                <li>Données détaillées (30 min) : <strong>730 jours</strong> d'historique (2 ans)</li>
+                <li>Enedis fournit <strong>1095 jours</strong> de données quotidiennes (3 ans)</li>
+                <li>Enedis fournit <strong>730 jours</strong> de données détaillées (30 min, 2 ans)</li>
+                {isClientMode && <li>Mode client : tout l'historique déjà stocké en base locale (import V1 compris) est affiché, au-delà de ces limites</li>}
                 <li>Les données Enedis ne sont disponibles qu'en <strong>J-1</strong> (hier)</li>
-                <li>Les calculs HC/HP utilisent des <strong>périodes glissantes de 365 jours</strong>, non des années calendaires</li>
+                <li>Les calculs HC/HP utilisent des <strong>périodes glissantes d'un an</strong>, non des années calendaires</li>
               </ul>
             </div>
           </div>

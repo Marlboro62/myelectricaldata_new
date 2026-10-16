@@ -2,17 +2,28 @@ import { create } from 'zustand'
 
 export type DataStatus = 'idle' | 'loading' | 'success' | 'error'
 
+/** Plage YYYY-MM-DD réellement demandée pour une série (fenêtre Enedis ou historique local, MED-64) */
+export interface DataRange {
+  start: string
+  end: string
+}
+
 export interface LoadingStatus {
   consumption: {
     daily: DataStatus
     detail: DataStatus
     powerMax: DataStatus
     detailProgress?: { current: number; total: number }
+    dailyRange?: DataRange
+    detailRange?: DataRange
+    powerMaxRange?: DataRange
   }
   production: {
     daily: DataStatus
     detail: DataStatus
     detailProgress?: { current: number; total: number }
+    dailyRange?: DataRange
+    detailRange?: DataRange
   }
 }
 
