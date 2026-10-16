@@ -6,6 +6,7 @@ journalier et 730 jours de courbe de charge. L'import lit le `cache.db` et produ
 (points Data Connect 2026 dans `raw_data`, valeurs en chaînes, horodatage au début d'intervalle).
 """
 from datetime import date, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -257,7 +258,10 @@ async def test_filtre_par_pdl(cache):
 
 
 class _Base14:
-    """Session factice d'un PostgreSQL 14 : seule la version est lue avant le refus."""
+    """Session factice d'un PostgreSQL 14 : seuls le dialecte et la version sont lus avant le refus."""
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
 
     async def execute(self, statement):
         class _Result:

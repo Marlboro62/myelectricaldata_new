@@ -75,7 +75,7 @@ Le mode client propose une navigation simplifiée par rapport au mode serveur.
 
 | Aspect | Mode Serveur | Mode Client |
 |--------|--------------|-------------|
-| Source données | Cache Valkey (24h) | PostgreSQL local (indéfini) |
+| Source données | Cache Valkey (24h) | Base locale (indéfini) |
 | Historique | 3 ans (journalier), 2 ans (courbe de charge) | Tout ce que contient la base locale |
 | Performance | Requête Enedis si miss | Toujours local |
 
@@ -101,7 +101,7 @@ Comportement identique à la consommation, avec stockage local indéfini.
 
 ### Bilan
 
-Synthèse calculée à partir des données locales PostgreSQL.
+Synthèse calculée à partir des données de la base locale.
 
 ### Contribuer
 
@@ -117,7 +117,7 @@ Synthèse calculée à partir des données locales PostgreSQL.
 | Aspect | Mode Serveur | Mode Client |
 |--------|--------------|-------------|
 | Source | API RTE directe | API MyElectricalData |
-| Stockage | Cache Valkey | PostgreSQL local |
+| Stockage | Cache Valkey | Base locale |
 | Historique | J-1 à J+1 | Complet (années précédentes) |
 
 ### EcoWatt
@@ -125,7 +125,7 @@ Synthèse calculée à partir des données locales PostgreSQL.
 | Aspect | Mode Serveur | Mode Client |
 |--------|--------------|-------------|
 | Source | API RTE directe | API MyElectricalData |
-| Stockage | Cache Valkey | PostgreSQL local |
+| Stockage | Cache Valkey | Base locale |
 | Alertes | Temps réel | Selon sync |
 
 ### Exporter (NOUVEAU)

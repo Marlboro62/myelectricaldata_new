@@ -15,7 +15,6 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select, and_, func, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..adapters.myelectricaldata import RateLimitExceededError, get_med_adapter
@@ -24,6 +23,7 @@ from ..models.ecowatt import EcoWatt
 from ..models.tempo_day import TempoDay, TempoColor
 from ..models.zen_flex_day import ZenFlexDay, ZenFlexDayType
 from .edf_zen_flex import OFFER_START, paris_today
+from .upsert import ENERGY_KEY, conflict_target, dialect_insert, is_sqlite, sqlite_index_exists
 from ..models.client_mode import (
     AddressData,
     ConsumptionData,
@@ -89,7 +89,7 @@ _daily_upsert_effective: bool | None = None
 
 
 class SyncService:
-    """Service to sync data from MyElectricalData API to local PostgreSQL"""
+    """Service to sync data from MyElectricalData API to the local database (PostgreSQL or SQLite)"""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -409,14 +409,18 @@ class SyncService:
         """
         global _daily_upsert_effective
         if _daily_upsert_effective is None:
-            result = await self.db.execute(
-                text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'uq_consumption_data'")
-            )
-            definition = result.scalar() or ""
-            _daily_upsert_effective = "NULLS NOT DISTINCT" in definition
+            if is_sqlite(self.db):
+                # SQLite : index partiel des lignes quotidiennes, à la place de NULLS NOT DISTINCT
+                _daily_upsert_effective = await sqlite_index_exists(self.db, "uq_consumption_data_daily")
+            else:
+                result = await self.db.execute(
+                    text("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'uq_consumption_data'")
+                )
+                definition = result.scalar() or ""
+                _daily_upsert_effective = "NULLS NOT DISTINCT" in definition
             if not _daily_upsert_effective:
                 logger.warning(
-                    "[SYNC] Contrainte quotidienne sans NULLS NOT DISTINCT (PostgreSQL < 15) : "
+                    "[SYNC] Contrainte quotidienne sans NULLS NOT DISTINCT (PostgreSQL < 15, ou index SQLite absent) : "
                     "pas de rafraîchissement forcé de J-2/J-1"
                 )
         return _daily_upsert_effective
@@ -924,7 +928,7 @@ class SyncService:
         records: list[dict[str, Any]],
         model_class: type[ConsumptionData | ProductionData],
     ) -> None:
-        """Upsert energy records using PostgreSQL ON CONFLICT
+        """Upsert energy records using ON CONFLICT (PostgreSQL or SQLite)
 
         Args:
             records: List of record dicts
@@ -952,20 +956,31 @@ class SyncService:
             )
             records = [records[i] for i in sorted(seen.values())]
 
-        # Use PostgreSQL upsert (INSERT ... ON CONFLICT UPDATE)
-        stmt = pg_insert(model_class).values(records)
+        # INSERT ... ON CONFLICT UPDATE. PostgreSQL vise la contrainte uq_<table> (NULLS NOT DISTINCT) ;
+        # SQLite n'a pas de cible commune aux deux granularités : lignes quotidiennes (interval_start NULL,
+        # index partiel) et détaillées passent dans deux requêtes.
+        if is_sqlite(self.db):
+            daily = [record for record in records if record.get("interval_start") is None]
+            detailed = [record for record in records if record.get("interval_start") is not None]
+            batches = [(batch, batch is daily) for batch in (daily, detailed) if batch]
+        else:
+            batches = [(records, False)]
 
-        # On conflict, update value and raw_data
-        stmt = stmt.on_conflict_do_update(
-            constraint=f"uq_{model_class.__tablename__}",
-            set_={
-                "value": stmt.excluded.value,
-                "raw_data": stmt.excluded.raw_data,
-                "updated_at": datetime.now(UTC),
-            },
-        )
+        constraint = f"uq_{model_class.__tablename__}"
+        for batch, is_daily in batches:
+            stmt = dialect_insert(self.db, model_class).values(batch)
 
-        await self.db.execute(stmt)
+            # On conflict, update value and raw_data
+            stmt = stmt.on_conflict_do_update(
+                **conflict_target(self.db, constraint, ENERGY_KEY, daily=is_daily),
+                set_={
+                    "value": stmt.excluded.value,
+                    "raw_data": stmt.excluded.raw_data,
+                    "updated_at": datetime.now(UTC),
+                },
+            )
+            await self.db.execute(stmt)
+
         await self.db.commit()
 
     async def _get_or_create_sync_status(

@@ -1,9 +1,25 @@
 from collections.abc import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession, async_sessionmaker
 from .base import Base
 from ..config import settings
+from ..config.sqlite import BUSY_TIMEOUT_MS, apply_sqlite_pragmas, is_sqlite_url, prepare_sqlite_file
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG_SQL)
+
+def make_engine(url: str) -> AsyncEngine:
+    """Moteur de la base : PostgreSQL tel quel, SQLite avec son dossier et ses PRAGMA (MED-65)."""
+    if not is_sqlite_url(url):
+        return create_async_engine(url, echo=settings.DEBUG_SQL)
+    sqlite_engine = create_async_engine(
+        url, echo=settings.DEBUG_SQL, connect_args={"timeout": BUSY_TIMEOUT_MS / 1000}
+    )
+    # Dossier créé à la première connexion, pas à l'import : aucun effet de bord sans usage de la base
+    event.listen(sqlite_engine.sync_engine, "do_connect", lambda *_: prepare_sqlite_file(url))
+    event.listen(sqlite_engine.sync_engine, "connect", apply_sqlite_pragmas)
+    return sqlite_engine
+
+
+engine = make_engine(settings.DATABASE_URL)
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

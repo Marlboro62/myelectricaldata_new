@@ -10,7 +10,7 @@ l'historique** déjà téléchargé.
 | | V1 (`myelectricaldata_import`) | V2 (client local) |
 |---|---|---|
 | Configuration | `/data/config.yaml` | fichier `.env` et interface web |
-| Stockage | SQLite `/data/cache.db` (ou PostgreSQL via `storage_uri`) | PostgreSQL 16 |
+| Stockage | SQLite `/data/cache.db` (ou PostgreSQL via `storage_uri`) | SQLite `/app/data/myelectricaldata.db` (recommandé) ou PostgreSQL 16 |
 | Compte | compte et token de l'ancienne passerelle | compte sur [www.v2.myelectricaldata.fr](https://www.v2.myelectricaldata.fr), identifiants `MED_CLIENT_ID` / `MED_CLIENT_SECRET` |
 | Interface | port 5000 | ports 8100 (interface) et 8181 (API) |
 
@@ -105,25 +105,26 @@ données venues d'Enedis sont conservées et l'import ne comble que les trous.
 ## Étape 3 : importer l'historique V1
 
 La commande `scripts/import_v1.py` est incluse dans l'image du backend. Elle lit le `cache.db` V1 et
-écrit dans la base de la V2, qui doit être en PostgreSQL 15 ou plus (le compose et le chart Helm
+écrit dans la base de la V2, SQLite ou PostgreSQL 15 ou plus (le compose et le chart Helm
 fournissent PostgreSQL 16 ; seule une base externe plus ancienne est refusée).
 
 ### Avec Docker Compose
 
-Depuis le dossier de la V2 :
+Depuis le dossier de la V2. Les exemples visent `docker-compose.sqlite.yml` ; avec PostgreSQL,
+remplacez-le par `docker-compose.yml`.
 
 ```bash
 # 1. Copier le cache.db V1 dans le conteneur backend
-docker compose -f docker-compose.yml cp /chemin/vers/myelectricaldata_v1/data/cache.db backend:/tmp/cache.db
+docker compose -f docker-compose.sqlite.yml cp /chemin/vers/myelectricaldata_v1/data/cache.db backend:/tmp/cache.db
 
 # 2. Simulation : compte ce qui serait importé, sans rien écrire
-docker compose -f docker-compose.yml exec backend python scripts/import_v1.py /tmp/cache.db --dry-run
+docker compose -f docker-compose.sqlite.yml exec backend python scripts/import_v1.py /tmp/cache.db --dry-run
 
 # 3. Import réel
-docker compose -f docker-compose.yml exec backend python scripts/import_v1.py /tmp/cache.db
+docker compose -f docker-compose.sqlite.yml exec backend python scripts/import_v1.py /tmp/cache.db
 
 # 4. Supprimer la copie (le cache.db contient aussi les anciens tokens V1)
-docker compose -f docker-compose.yml exec backend rm /tmp/cache.db
+docker compose -f docker-compose.sqlite.yml exec backend rm /tmp/cache.db
 ```
 
 Exemple de sortie :
@@ -173,7 +174,7 @@ Si votre `config.yaml` V1 contenait une clé `storage_uri` en `postgresql://…`
 place du chemin du `cache.db` :
 
 ```bash
-docker compose -f docker-compose.yml exec backend \
+docker compose -f docker-compose.sqlite.yml exec backend \
   python scripts/import_v1.py "postgresql://user:motdepasse@hote:5432/myelectricaldata" --dry-run
 ```
 
@@ -268,7 +269,18 @@ Oui. Les lignes déjà présentes sont comptées en « déjà présentes » et l
 
 ### Comment annuler l'import ?
 
-Les lignes importées portent la source `myelectricaldata_v1`. Pour les retirer :
+Les lignes importées portent la source `myelectricaldata_v1`. Pour les retirer, en SQLite :
+
+```bash
+docker compose -f docker-compose.sqlite.yml exec backend python -c "
+import sqlite3
+db = sqlite3.connect('/app/data/myelectricaldata.db', timeout=30)
+for table in ('consumption_data', 'production_data', 'max_power_data'):
+    db.execute(f\"DELETE FROM {table} WHERE source = 'myelectricaldata_v1'\")
+db.commit()"
+```
+
+En PostgreSQL :
 
 ```bash
 docker compose -f docker-compose.yml exec postgres psql -U myelectricaldata myelectricaldata_client -c "

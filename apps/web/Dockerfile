@@ -34,6 +34,10 @@ RUN npm run build
 # =============================================================================
 FROM nginx:alpine
 
+# Apply Alpine security fixes not yet shipped in the upstream nginx:alpine image
+# (e.g. CVE-2026-85091, zlib 1.3.2-r0 -> 1.3.2-r1)
+RUN apk upgrade --no-cache
+
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Dossier du proxy /api optionnel (rempli par entrypoint.sh si API_PROXY_URL est définie)

@@ -26,7 +26,7 @@ Le mode client adopte une architecture simplifiée par rapport au mode serveur, 
 │              │                     │                     │                    │
 │              ▼                     ▼                     ▼                    │
 │   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐             │
-│   │ API Adapter     │   │ PostgreSQL      │   │ Exporter        │             │
+│   │ API Adapter     │   │ SQLite / PG     │   │ Exporter        │             │
 │   │ v2.myelectrical │   │ (stockage local)│   │ Service         │             │
 │   │ data.fr         │   │ :5433           │   │                 │             │
 │   └────────┬────────┘   └────────┬────────┘   └────────┬────────┘             │
@@ -139,7 +139,20 @@ class MyElectricalDataAdapter:
         """Envoie une contribution"""
 ```
 
-### Base de données PostgreSQL
+### Base de données locale
+
+Le client tourne sur **SQLite** (un fichier, `docker-compose.sqlite.yml` ou chart sans PostgreSQL) ou
+sur **PostgreSQL** ; la passerelle (mode serveur) reste sur PostgreSQL. Le même code sert les deux
+bases :
+
+- **schéma** : en SQLite, le premier `alembic upgrade head` crée le schéma depuis les modèles puis
+  pose la tête Alembic ; les révisions suivantes s'appliquent en mode batch (`render_as_batch`).
+  Toute nouvelle migration doit donc passer sur les deux bases ;
+- **upserts** (`services/upsert.py`) : contrainte nommée en PostgreSQL ; colonnes en SQLite, avec un
+  index unique partiel `WHERE interval_start IS NULL` pour les lignes quotidiennes, à la place de
+  `NULLS NOT DISTINCT` ;
+- **dates** : le type `TZDateTime` rend en SQLite des dates avec fuseau (UTC), comme PostgreSQL ;
+- **connexion** (`config/sqlite.py`) : journal WAL, `busy_timeout` de 30 s, clés étrangères actives.
 
 #### Schéma mode client
 
@@ -296,7 +309,7 @@ Le mode client utilise une stratégie **local-first** pour minimiser les appels 
 │    │                        │<───────────────────────│                      │
 │    │                        │                        │                      │
 │    │                        │  INSERT/UPDATE         │                      │
-│    │                        │  PostgreSQL local      │                      │
+│    │                        │  Base locale           │                      │
 │    │                        │                        │                      │
 │    │  200 OK (summary)      │                        │                      │
 │    │<───────────────────────│                        │                      │
@@ -375,7 +388,7 @@ Le mode client utilise une stratégie **local-first** pour minimiser les appels 
 |--------|--------------|-------------|
 | **Source données** | Enedis API direct | API MyElectricalData |
 | **Authentification** | JWT + OAuth2 Enedis | Token API pré-configuré |
-| **Stockage** | Cache Valkey (24h) | PostgreSQL (indéfini) |
+| **Stockage** | Cache Valkey (24h) | Base locale (indéfini) |
 | **Users** | Multi-utilisateurs | Mono-utilisateur |
 | **Administration** | Complète (UI admin) | Aucune |
 | **Rate limiting** | 5 req/s + quotas | Géré par API distante |
@@ -516,10 +529,12 @@ MED_API_URL=https://www.v2.myelectricaldata.fr/api
 MED_CLIENT_ID=cli_xxxxxxxxxxxxx
 MED_CLIENT_SECRET=xxxxxxxxxxxxxxxx
 
-# Base de données locale (port différent du mode serveur)
-DATABASE_URL=postgresql+asyncpg://client:password@postgres-client:5432/client
+# Base de données locale : un fichier SQLite...
+DATABASE_URL=sqlite+aiosqlite:////app/data/myelectricaldata.db
+# ...ou PostgreSQL (port différent du mode serveur)
+# DATABASE_URL=postgresql+asyncpg://client:password@postgres-client:5432/client
 
-# Pas de Valkey nécessaire (stockage PostgreSQL)
+# Pas de Valkey nécessaire (stockage en base locale)
 # REDIS_URL non défini
 
 # Exports (optionnel)

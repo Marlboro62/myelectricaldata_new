@@ -2,9 +2,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Boolean, ForeignKey, DateTime
+from sqlalchemy import String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, TZDateTime
 
 if TYPE_CHECKING:
     from .role import Role
@@ -25,7 +25,7 @@ class User(Base, TimestampMixin):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     debug_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     admin_data_sharing: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    admin_data_sharing_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_data_sharing_enabled_at: Mapped[datetime | None] = mapped_column(TZDateTime(), nullable=True)
     enedis_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     role_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("roles.id"), nullable=True)
 
