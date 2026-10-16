@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Building2, Zap, Tag, X, AlertTriangle, Loader2, ChevronDown, Search } from 'lucide-react'
 import { energyApi, EnergyOffer } from '@/api/energy'
+import { isOfferExpired } from '@/utils/offers'
 
 interface OfferSelectorProps {
   selectedOfferId: string | null | undefined
@@ -76,13 +77,6 @@ export default function OfferSelector({
   const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
   const allOffers = useMemo(() => offersResponse?.data || [], [offersResponse?.data])
 
-  // Détecte si une offre est périmée (désactivée ou hors période de validité)
-  const isExpiredOffer = (offer: EnergyOffer): boolean => {
-    if (offer.is_active === false) return true
-    if (offer.valid_to && new Date(offer.valid_to) < new Date()) return true
-    return false
-  }
-
   // Find selected offer details
   const selectedOffer = useMemo(() => {
     if (!selectedOfferId) return null
@@ -90,7 +84,7 @@ export default function OfferSelector({
   }, [selectedOfferId, allOffers])
 
   // Détecter si l'offre sélectionnée est périmée (pour le style du résumé)
-  const isSelectedOfferExpired = selectedOffer ? isExpiredOffer(selectedOffer) : false
+  const isSelectedOfferExpired = selectedOffer ? isOfferExpired(selectedOffer) : false
 
   // Offres filtrées par puissance uniquement (base pour tous les sélecteurs)
   const powerFilteredOffers = useMemo(() => {
@@ -118,12 +112,12 @@ export default function OfferSelector({
   const effectiveShowExpired = showExpired || isSelectedOfferExpired
   const visibleOffers = useMemo(() => {
     if (effectiveShowExpired) return powerFilteredOffers
-    return powerFilteredOffers.filter(o => !isExpiredOffer(o))
+    return powerFilteredOffers.filter(o => !isOfferExpired(o))
   }, [powerFilteredOffers, effectiveShowExpired])
 
   // Détecte s'il existe des offres périmées (pour afficher/masquer le toggle)
   const hasExpiredOffers = useMemo(() => {
-    return powerFilteredOffers.some(o => isExpiredOffer(o))
+    return powerFilteredOffers.some(o => isOfferExpired(o))
   }, [powerFilteredOffers])
 
   // Notifie le parent quand hasExpiredOffers change
@@ -197,7 +191,7 @@ export default function OfferSelector({
     if (effectiveProviderId && effectiveOfferType && !selectedOffer && !selectedOfferId) {
       const offers = visibleOffers
         .filter(o => o.provider_id === effectiveProviderId && o.offer_type === effectiveOfferType)
-        .filter(o => !isExpiredOffer(o))
+        .filter(o => !isOfferExpired(o))
         .sort((a, b) => a.name.localeCompare(b.name))
       if (offers.length > 0) {
         onChange(offers[0].id)
@@ -527,8 +521,8 @@ export default function OfferSelector({
   }
 
   // Séparer les offres actives et obsolètes pour le dropdown
-  const activeOffers = useMemo(() => availableOffers.filter(o => !isExpiredOffer(o)), [availableOffers])
-  const expiredOffers = useMemo(() => availableOffers.filter(o => isExpiredOffer(o)), [availableOffers])
+  const activeOffers = useMemo(() => availableOffers.filter(o => !isOfferExpired(o)), [availableOffers])
+  const expiredOffers = useMemo(() => availableOffers.filter(o => isOfferExpired(o)), [availableOffers])
 
   return (
     <div className={`space-y-3 ${className}`}>

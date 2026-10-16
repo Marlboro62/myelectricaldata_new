@@ -28,6 +28,8 @@ interface OfferPricingCardProps {
   onComparisonChange?: (offerId: string | null) => void
   comparisonOfferId?: string | null
   defaultExpanded?: boolean
+  // The PDL's offer is closed (deactivated or valid_to in the past): prices still apply to past consumption
+  isOfferClosed?: boolean
 }
 
 // Format currency
@@ -56,7 +58,8 @@ export function OfferPricingCard({
   providers = [],
   onComparisonChange,
   comparisonOfferId,
-  defaultExpanded = false
+  defaultExpanded = false,
+  isOfferClosed = false
 }: OfferPricingCardProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -119,6 +122,13 @@ export function OfferPricingCard({
             <div className="font-semibold text-gray-900 dark:text-white">
               {selectedOffer.providerName} - {selectedOffer.name}
             </div>
+            {isOfferClosed && (
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded">
+                {selectedOffer.valid_to
+                  ? `Offre close depuis le ${new Date(selectedOffer.valid_to).toLocaleDateString('fr-FR')}`
+                  : 'Offre close'}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
