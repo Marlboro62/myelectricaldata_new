@@ -61,6 +61,8 @@ export function shouldRefresh({
 
 export interface UseClientAutoRefreshParams {
   usagePointId: string | null
+  /** PDL de production lié, chargé lui aussi par fetchAllData : sa synchro compte dans la signature */
+  linkedUsagePointId?: string | null
   /** Faux en mode serveur, en démo, ou tant que le PDL n'est pas chargé */
   enabled: boolean
   /** Le cache du navigateur contient-il déjà des données pour ce PDL ? */
@@ -76,9 +78,23 @@ async function readSyncStatus(usagePointId: string): Promise<PdlSyncStatus | nul
   return status?.sync_types ? status : null
 }
 
+/** Signature de tous les PDL chargés par la récupération ; null si aucun statut n'est lisible */
+export function combineSignatures(usagePointIds: string[], parts: (string | null)[]): string | null {
+  if (parts.every((part) => part === null)) return null
+  return usagePointIds.map((id, i) => `${id}:${parts[i] ?? ''}`).join('||')
+}
+
+async function readCombinedSignature(usagePointIds: string[]): Promise<string | null> {
+  const parts = (await Promise.all(usagePointIds.map(readSyncStatus))).map(computeSyncSignature)
+  return combineSignatures(usagePointIds, parts)
+}
+
+// Par onglet (sessionStorage) : chaque onglet a son propre cache React Query en mémoire, une
+// signature partagée entre onglets laisserait les autres sur leurs anciennes données. Coût : une
+// relecture locale silencieuse à l'ouverture d'un onglet.
 function readStoredSignature(key: string): string | null {
   try {
-    return localStorage.getItem(key)
+    return sessionStorage.getItem(key)
   } catch {
     return null
   }
@@ -86,14 +102,15 @@ function readStoredSignature(key: string): string | null {
 
 function storeSignature(key: string, signature: string) {
   try {
-    localStorage.setItem(key, signature)
+    sessionStorage.setItem(key, signature)
   } catch {
-    // localStorage indisponible (navigation privée stricte) : on relira au prochain passage
+    // Stockage indisponible (navigation privée stricte) : on relira au prochain passage
   }
 }
 
 export function useClientAutoRefresh({
   usagePointId,
+  linkedUsagePointId = null,
   enabled,
   hasCachedData,
   refresh,
@@ -105,20 +122,30 @@ export function useClientAutoRefresh({
   hasCachedDataRef.current = hasCachedData
   refreshRef.current = refresh
 
-  // Partagé entre le montage, l'intervalle et le retour sur l'onglet : une seule récupération à la fois
+  // Partagé entre le montage, l'intervalle et le retour sur l'onglet : une seule récupération à la fois.
+  // Un contrôle demandé pendant une récupération (changement de PDL, retour sur l'onglet) est rejoué
+  // à la fin de celle-ci, par le contrôle du PDL courant
   const inFlightRef = useRef(false)
+  const pendingRef = useRef(false)
+  const latestCheckRef = useRef<(() => Promise<void>) | null>(null)
 
   useEffect(() => {
     if (!enabled || !usagePointId) return
 
     let cancelled = false
     const storageKey = SYNC_SIGNATURE_KEY_PREFIX + usagePointId
+    const usagePointIds = linkedUsagePointId && linkedUsagePointId !== usagePointId
+      ? [usagePointId, linkedUsagePointId]
+      : [usagePointId]
 
     const check = async () => {
-      if (inFlightRef.current) return
+      if (inFlightRef.current) {
+        pendingRef.current = true
+        return
+      }
       inFlightRef.current = true
       try {
-        const currentSignature = computeSyncSignature(await readSyncStatus(usagePointId))
+        const currentSignature = await readCombinedSignature(usagePointIds)
         if (cancelled) return
 
         const decision = shouldRefresh({
@@ -136,10 +163,18 @@ export function useClientAutoRefresh({
         if (!cancelled && currentSignature && hasCachedDataRef.current()) {
           storeSignature(storageKey, currentSignature)
         }
+      } catch (error) {
+        // Jamais de rejet non géré depuis un timer ; le prochain passage retentera
+        logger.log('[AutoRefresh] Contrôle interrompu:', error)
       } finally {
         inFlightRef.current = false
+        if (pendingRef.current) {
+          pendingRef.current = false
+          void latestCheckRef.current?.()
+        }
       }
     }
+    latestCheckRef.current = check
 
     check()
     const timer = setInterval(check, intervalMs)
@@ -151,8 +186,9 @@ export function useClientAutoRefresh({
 
     return () => {
       cancelled = true
+      if (latestCheckRef.current === check) latestCheckRef.current = null
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [enabled, usagePointId, intervalMs])
+  }, [enabled, usagePointId, linkedUsagePointId, intervalMs])
 }

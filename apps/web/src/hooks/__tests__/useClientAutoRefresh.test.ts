@@ -4,6 +4,7 @@ import { syncApi } from '@/api/sync'
 import {
   AUTO_REFRESH_INTERVAL_MS,
   SYNC_SIGNATURE_KEY_PREFIX,
+  combineSignatures,
   computeSyncSignature,
   shouldRefresh,
   useClientAutoRefresh,
@@ -22,6 +23,9 @@ const status = (dailyNewest: string | null, detailNewest: string | null, lastSyn
   },
 })
 
+// Signature telle que le hook la mémorise pour un PDL seul
+const sig = (s: PdlSyncStatus) => combineSignatures([PDL], [computeSyncSignature(s)]) ?? ''
+
 // L'API renvoie le statut brut (route sans enveloppe APIResponse)
 const mockStatus = (s: PdlSyncStatus) =>
   vi.mocked(syncApi.getStatusPdl).mockResolvedValue(s as unknown as Awaited<ReturnType<typeof syncApi.getStatusPdl>>)
@@ -29,9 +33,7 @@ const mockStatus = (s: PdlSyncStatus) =>
 // Laisse passer les promesses (lecture du statut puis refresh) sans avancer le temps
 const flush = async () => {
   await act(async () => {
-    await Promise.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
+    for (let i = 0; i < 8; i++) await Promise.resolve()
   })
 }
 
@@ -98,7 +100,7 @@ describe('shouldRefresh', () => {
 describe('useClientAutoRefresh', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    localStorage.clear()
+    sessionStorage.clear()
     vi.mocked(syncApi.getStatusPdl).mockReset()
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
   })
@@ -126,7 +128,7 @@ describe('useClientAutoRefresh', () => {
     renderHook(() => useClientAutoRefresh({ usagePointId: PDL, enabled: true, hasCachedData: () => cached, refresh }))
     await flush()
 
-    expect(localStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBe(computeSyncSignature(s))
+    expect(sessionStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBe(sig(s))
   })
 
   it('ne mémorise rien quand la récupération laisse le cache vide (erreurs avalées par fetchAllData)', async () => {
@@ -137,12 +139,12 @@ describe('useClientAutoRefresh', () => {
     await flush()
 
     expect(refresh).toHaveBeenCalledTimes(1)
-    expect(localStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBeNull()
+    expect(sessionStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBeNull()
   })
 
   it('ne récupère pas quand le cache est à jour de la dernière synchro', async () => {
     const s = status('2026-10-15', '2026-10-15')
-    localStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, computeSyncSignature(s) ?? '')
+    sessionStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, sig(s))
     mockStatus(s)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
@@ -155,7 +157,7 @@ describe('useClientAutoRefresh', () => {
 
   it('relit le statut toutes les 30 min et récupère quand une donnée nouvelle est arrivée', async () => {
     const before = status('2026-10-14', '2026-10-14')
-    localStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, computeSyncSignature(before) ?? '')
+    sessionStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, sig(before))
     mockStatus(before)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
@@ -175,7 +177,7 @@ describe('useClientAutoRefresh', () => {
 
   it("relit le statut quand l'onglet redevient visible (timers suspendus sur mobile)", async () => {
     const s = status('2026-10-14', '2026-10-14')
-    localStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, computeSyncSignature(s) ?? '')
+    sessionStorage.setItem(SYNC_SIGNATURE_KEY_PREFIX + PDL, sig(s))
     mockStatus(s)
     const refresh = vi.fn().mockResolvedValue(undefined)
 
@@ -206,6 +208,53 @@ describe('useClientAutoRefresh', () => {
 
     expect(refresh).toHaveBeenCalledTimes(1)
     release()
+  })
+
+  it('récupère quand seule la synchro du PDL de production lié a avancé', async () => {
+    const PROD_PDL = '55555555555555'
+    const conso = status('2026-10-15', '2026-10-15')
+    const prodBefore = { ...status('2026-10-14', '2026-10-14'), usage_point_id: PROD_PDL }
+    const prodAfter = { ...status('2026-10-15', '2026-10-15'), usage_point_id: PROD_PDL }
+    sessionStorage.setItem(
+      SYNC_SIGNATURE_KEY_PREFIX + PDL,
+      combineSignatures([PDL, PROD_PDL], [computeSyncSignature(conso), computeSyncSignature(prodBefore)]) ?? ''
+    )
+    vi.mocked(syncApi.getStatusPdl).mockImplementation(async (id: string) =>
+      (id === PROD_PDL ? prodAfter : conso) as unknown as Awaited<ReturnType<typeof syncApi.getStatusPdl>>
+    )
+    const refresh = vi.fn().mockResolvedValue(undefined)
+
+    renderHook(() =>
+      useClientAutoRefresh({ usagePointId: PDL, linkedUsagePointId: PROD_PDL, enabled: true, hasCachedData: () => true, refresh })
+    )
+    await flush()
+
+    expect(syncApi.getStatusPdl).toHaveBeenCalledWith(PROD_PDL)
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('contrôle le nouveau PDL une fois la récupération du précédent terminée (changement de PDL)', async () => {
+    const OTHER_PDL = '98765432109876'
+    mockStatus(status('2026-10-15', '2026-10-15'))
+    let release: () => void = () => {}
+    const refresh = vi.fn().mockImplementation(() => new Promise<void>((resolve) => { release = resolve }))
+
+    const { rerender } = renderHook(
+      ({ pdl }: { pdl: string }) => useClientAutoRefresh({ usagePointId: pdl, enabled: true, hasCachedData: () => false, refresh }),
+      { initialProps: { pdl: PDL } }
+    )
+    await flush()
+    expect(refresh).toHaveBeenCalledTimes(1)
+
+    rerender({ pdl: OTHER_PDL })
+    await flush()
+    // Pas de récupération en parallèle pendant celle du premier PDL
+    expect(refresh).toHaveBeenCalledTimes(1)
+
+    release()
+    await flush()
+    expect(syncApi.getStatusPdl).toHaveBeenLastCalledWith(OTHER_PDL)
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 
   it('récupère quand même un cache vide si le statut est illisible (404 avant la première synchro)', async () => {

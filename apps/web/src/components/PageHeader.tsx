@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { TrendingUp, Sun, Calculator, Download, Lock, LayoutDashboard, Calendar, Zap, Users, AlertCircle, BookOpen, Settings as SettingsIcon, Key, Shield, FileText, Activity, Euro, Scale, UserCheck, Radio, Home, Database, SlidersHorizontal } from 'lucide-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import { pdlApi } from '@/api/pdl'
 import { adminApi } from '@/api/admin'
 import { usePdlStore } from '@/stores/pdlStore'
@@ -81,6 +81,9 @@ export default function PageHeader({ actions }: PageHeaderProps = {}) {
   const { isAdmin } = usePermissions()
   const { isServerMode } = useAppMode()
   const queryClient = useQueryClient()
+  // Le cache persisté (IndexedDB) se restaure de façon asynchrone : tant que ce n'est pas fini,
+  // le cache paraît vide et le rafraîchissement automatique lancerait une récupération pour rien
+  const isRestoring = useIsRestoring()
 
   // Clear stale impersonation state for non-admin users
   useEffect(() => {
@@ -199,7 +202,8 @@ export default function PageHeader({ actions }: PageHeaderProps = {}) {
 
   useClientAutoRefresh({
     usagePointId: selectedPdl || null,
-    enabled: !isServerMode && !isDemo && !!selectedPDLDetails,
+    linkedUsagePointId: linkedProductionUsagePointId ?? null,
+    enabled: !isServerMode && !isDemo && !isRestoring && !!selectedPDLDetails,
     hasCachedData,
     refresh: autoRefresh,
   })
