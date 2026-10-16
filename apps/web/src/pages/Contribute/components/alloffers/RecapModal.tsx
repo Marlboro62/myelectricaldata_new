@@ -4,7 +4,7 @@
 
 import { Send, X, Plus, Trash2, Pencil, AlertCircle, Package, Zap, Link } from 'lucide-react'
 import type { EnergyOffer } from '@/api/energy'
-import { getFieldKeysForOfferType, getLabelColor, getCleanOfferName, periodsOverlap } from '../../utils/offerPricing'
+import { getFieldKeysForOfferType, getLabelColor, getCleanOfferName, isGroupPowerInDb } from '../../utils/offerPricing'
 import { FIELD_LABELS } from '../../types'
 import type { AllOffersState } from '../../hooks/useAllOffersState'
 
@@ -601,10 +601,9 @@ function NewGroupsSection({ state }: { state: AllOffersState }) {
         const groupType = group.offer_type || filterOfferType
         const fieldKeys = getFieldKeysForOfferType(groupType)
         const isAlreadyInDb = group.alreadyInDb === true
-        const hasDuplicates = !isAlreadyInDb && group.powers.some(p => p.power > 0 && existingPowers.some(ep =>
-          ep.power === p.power && ep.offer_type === groupType &&
-          periodsOverlap(group.validFrom || undefined, group.validTo || undefined, ep.valid_from, ep.valid_to)
-        ))
+        const hasDuplicates = !isAlreadyInDb && group.powers.some(p =>
+          p.power > 0 && isGroupPowerInDb(existingPowers, group.name, groupType, p.power, group.validFrom, group.validTo)
+        )
         const selectedCount = group.powers.filter((_, pi) => !recapExcludedPowers.has(`group-${index}-${pi}`)).length
         const allSelected = selectedCount === group.powers.length
         const noneSelected = selectedCount === 0
@@ -678,10 +677,8 @@ function NewGroupsSection({ state }: { state: AllOffersState }) {
                 </thead>
                 <tbody className={`divide-y ${hasDuplicates || isAlreadyInDb ? 'divide-red-200 dark:divide-red-800' : 'divide-blue-200 dark:divide-blue-700'}`}>
                   {group.powers.map((power, powerIndex) => {
-                    const isDup = power.power > 0 && existingPowers.some(ep =>
-                      ep.power === power.power && ep.offer_type === groupType &&
-                      periodsOverlap(group.validFrom || undefined, group.validTo || undefined, ep.valid_from, ep.valid_to)
-                    )
+                    const isDup = power.power > 0 &&
+                      isGroupPowerInDb(existingPowers, group.name, groupType, power.power, group.validFrom, group.validTo)
                     const exclusionKey = `group-${index}-${powerIndex}`
                     const isExcluded = recapExcludedPowers.has(exclusionKey)
                     return (

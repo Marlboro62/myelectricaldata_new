@@ -36,3 +36,24 @@ export function findOpenGridToClose(
     getCleanOfferName(o.name).toLowerCase() === name
   )
 }
+
+/**
+ * Grille ouverte du même nom qui débute APRÈS la grille importée, s'il y en a une.
+ *
+ * Elle ne se clôt pas avant son début : l'import reste bloqué en doublon, et le message cite sa
+ * date pour qu'on la corrige (ex. Enercoop, grille d'août saisie au 08/10, revue de la PR #158).
+ */
+export function findLaterOpenGrid(
+  existingForType: EnergyOffer[],
+  offerName: string,
+  importValidFrom: string,
+): EnergyOffer | undefined {
+  const name = getCleanOfferName(offerName).toLowerCase()
+  const importDay = importValidFrom.slice(0, 10)
+  return existingForType.find(o =>
+    !o.valid_to &&
+    !!o.valid_from &&
+    o.valid_from.slice(0, 10) > importDay &&
+    getCleanOfferName(o.name).toLowerCase() === name
+  )
+}

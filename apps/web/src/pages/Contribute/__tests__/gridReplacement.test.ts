@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { EnergyOffer } from '@/api/energy'
-import { dayBefore, findOpenGridToClose } from '../utils/gridReplacement'
+import { dayBefore, findLaterOpenGrid, findOpenGridToClose } from '../utils/gridReplacement'
 
 const offre = (id: string, name: string, power_kva: number, valid_from?: string, valid_to?: string): EnergyOffer => ({
   id, provider_id: 'p1', name, offer_type: 'BASE', subscription_price: 10, base_price: 0.25,
@@ -55,5 +55,23 @@ describe('findOpenGridToClose', () => {
 
   it('ignore une grille ouverte sans date de début (offre legacy)', () => {
     expect(findOpenGridToClose([offre('l6', 'BasicWatt', 6)], 'BasicWatt', '2026-08-01')).toEqual([])
+  })
+})
+
+describe('findLaterOpenGrid', () => {
+  // Enercoop en base (revue de la PR #158) : la grille d'août saisie au 08/10
+  const existantes = [
+    offre('b6', 'BasicWatt', 6, '2026-02-05T00:00:00+00:00'),
+    offre('b7', 'BasicWatt', 7, '2026-10-08T00:00:00+00:00'),
+    offre('c7', 'Coopérative', 7, '2026-11-01T00:00:00+00:00'),
+  ]
+
+  it('rend la grille ouverte du même nom qui débute après la grille importée', () => {
+    expect(findLaterOpenGrid(existantes, 'basicwatt - 7 kVA', '2026-08-01')?.id).toBe('b7')
+  })
+
+  it("ne rend rien quand aucune grille ouverte ne débute après", () => {
+    expect(findLaterOpenGrid(existantes, 'BasicWatt', '2026-10-08')).toBeUndefined()
+    expect(findLaterOpenGrid([offre('x', 'BasicWatt', 7, '2026-10-08', '2026-12-31')], 'BasicWatt', '2026-08-01')).toBeUndefined()
   })
 })
