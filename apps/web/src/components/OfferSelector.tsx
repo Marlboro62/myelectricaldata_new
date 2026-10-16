@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Building2, Zap, Tag, X, AlertTriangle, Loader2, ChevronDown, Search } from 'lucide-react'
-import { energyApi, EnergyOffer } from '@/api/energy'
+import type { EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
+import { isOfferExpired } from '@/utils/offers'
 
 interface OfferSelectorProps {
   selectedOfferId: string | null | undefined
@@ -55,33 +57,24 @@ export default function OfferSelector({
   // refetchOnMount: 'always' force un fetch frais à chaque mount pour éviter
   // les sélecteurs vides quand les données ne sont pas en cache (bug race condition)
   // placeholderData: garde les données précédentes pendant un refetch
-  const { data: providersResponse, isLoading: isLoadingProviders, isFetching: isFetchingProviders } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: energyApi.getProviders,
+  const { data: providersData, isLoading: isLoadingProviders, isFetching: isFetchingProviders } = useQuery({
+    ...providersQueryOptions(),
     staleTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     placeholderData: keepPreviousData,
   })
 
   // Fetch all offers (incluant les offres périmées pour permettre leur sélection)
-  const { data: offersResponse, isLoading: isLoadingOffers, isFetching: isFetchingOffers } = useQuery({
-    queryKey: ['energy-offers', 'with-history'],
-    queryFn: () => energyApi.getOffers(undefined, true),
+  const { data: offersData, isLoading: isLoadingOffers, isFetching: isFetchingOffers } = useQuery({
+    ...offersWithHistoryQueryOptions(),
     staleTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     placeholderData: keepPreviousData,
   })
 
   // Stabilize providers and offers arrays
-  const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
-  const allOffers = useMemo(() => offersResponse?.data || [], [offersResponse?.data])
-
-  // Détecte si une offre est périmée (désactivée ou hors période de validité)
-  const isExpiredOffer = (offer: EnergyOffer): boolean => {
-    if (offer.is_active === false) return true
-    if (offer.valid_to && new Date(offer.valid_to) < new Date()) return true
-    return false
-  }
+  const providers = useMemo(() => providersData || [], [providersData])
+  const allOffers = useMemo(() => offersData || [], [offersData])
 
   // Find selected offer details
   const selectedOffer = useMemo(() => {
@@ -90,7 +83,7 @@ export default function OfferSelector({
   }, [selectedOfferId, allOffers])
 
   // Détecter si l'offre sélectionnée est périmée (pour le style du résumé)
-  const isSelectedOfferExpired = selectedOffer ? isExpiredOffer(selectedOffer) : false
+  const isSelectedOfferExpired = selectedOffer ? isOfferExpired(selectedOffer) : false
 
   // Offres filtrées par puissance uniquement (base pour tous les sélecteurs)
   const powerFilteredOffers = useMemo(() => {
@@ -118,12 +111,12 @@ export default function OfferSelector({
   const effectiveShowExpired = showExpired || isSelectedOfferExpired
   const visibleOffers = useMemo(() => {
     if (effectiveShowExpired) return powerFilteredOffers
-    return powerFilteredOffers.filter(o => !isExpiredOffer(o))
+    return powerFilteredOffers.filter(o => !isOfferExpired(o))
   }, [powerFilteredOffers, effectiveShowExpired])
 
   // Détecte s'il existe des offres périmées (pour afficher/masquer le toggle)
   const hasExpiredOffers = useMemo(() => {
-    return powerFilteredOffers.some(o => isExpiredOffer(o))
+    return powerFilteredOffers.some(o => isOfferExpired(o))
   }, [powerFilteredOffers])
 
   // Notifie le parent quand hasExpiredOffers change
@@ -197,7 +190,7 @@ export default function OfferSelector({
     if (effectiveProviderId && effectiveOfferType && !selectedOffer && !selectedOfferId) {
       const offers = visibleOffers
         .filter(o => o.provider_id === effectiveProviderId && o.offer_type === effectiveOfferType)
-        .filter(o => !isExpiredOffer(o))
+        .filter(o => !isOfferExpired(o))
         .sort((a, b) => a.name.localeCompare(b.name))
       if (offers.length > 0) {
         onChange(offers[0].id)
@@ -527,8 +520,8 @@ export default function OfferSelector({
   }
 
   // Séparer les offres actives et obsolètes pour le dropdown
-  const activeOffers = useMemo(() => availableOffers.filter(o => !isExpiredOffer(o)), [availableOffers])
-  const expiredOffers = useMemo(() => availableOffers.filter(o => isExpiredOffer(o)), [availableOffers])
+  const activeOffers = useMemo(() => availableOffers.filter(o => !isOfferExpired(o)), [availableOffers])
+  const expiredOffers = useMemo(() => availableOffers.filter(o => isOfferExpired(o)), [availableOffers])
 
   return (
     <div className={`space-y-3 ${className}`}>
