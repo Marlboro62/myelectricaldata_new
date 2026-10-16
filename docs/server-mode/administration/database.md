@@ -26,7 +26,7 @@ DATABASE_URL=postgresql+asyncpg://myelectricaldata:VOTRE_MOT_DE_PASSE@<hote-post
 docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 ```
 
-Dans l'URL, les caractères `@ / : # ?` du mot de passe doivent être encodés (`%40`, `%2F`, `%3A`, `%23`, `%3F`).
+Le mot de passe ne doit contenir que des lettres, des chiffres et `- _ . ~` : `@ / : # ?` cassent l'URL, et leur encodage (`%40`...) fait échouer les migrations au démarrage (`alembic/env.py` passe l'URL telle quelle à `ConfigParser`, qui rejette le `%`).
 
 Installation complète : [Installation Docker](../installation/docker.md).
 

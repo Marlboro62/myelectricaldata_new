@@ -78,7 +78,7 @@ L'hôte est le service PostgreSQL du chart, ou `externalDatabase.host` quand `po
 
 ### Dépendances
 
-**Fichier** : `apps/api/pyproject.toml`
+**Fichier** : `apps/api/pyproject.toml` (extrait)
 
 ```toml
 dependencies = [
@@ -86,8 +86,6 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
 ]
 ```
-
-Les autres pilotes présents dans les dépendances servent au client local.
 
 ## Troubleshooting
 

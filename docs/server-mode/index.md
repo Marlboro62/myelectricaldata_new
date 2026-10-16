@@ -119,8 +119,8 @@ cd myelectricaldata_new
 cp apps/api/.env.example apps/api/.env.docker
 vim apps/api/.env.docker
 
-# Démarrer le mode serveur
-docker compose up -d
+# Démarrer le mode serveur (PostgreSQL et Valkey à fournir)
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 ```
 
 **Accès** : http://localhost:8000
