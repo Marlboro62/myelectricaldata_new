@@ -10,6 +10,7 @@ Les tests de parité tournent sur les deux dialectes. PostgreSQL est fourni par 
 
 ⚠️ La base PostgreSQL visée est VIDÉE à chaque test (drop_all du schéma V2) : jamais une base réelle.
 """
+import asyncio
 import os
 import sqlite3
 import subprocess
@@ -152,11 +153,30 @@ def test_amorcage_sqlite_rejouable(tmp_path):
         assert conn.execute("SELECT version_num FROM alembic_version").fetchall() == [(_head(),)]
 
 
+def test_amorcage_sqlite_interrompu_reprend(tmp_path):
+    """Premier démarrage tué entre la création d'alembic_version et la pose de la tête (table vide, tables
+    du schéma incomplètes) : le redémarrage doit amorcer de nouveau, pas rejouer les révisions
+    PostgreSQL sur les tables déjà créées (revue Codex)."""
+    url = f"sqlite+aiosqlite:///{tmp_path / 'client.db'}"
+    assert _alembic_upgrade(url).returncode == 0
+    with sqlite3.connect(tmp_path / "client.db") as conn:
+        conn.execute("INSERT INTO tempo_days (id, date, color) VALUES ('2026-01-05', '2026-01-05', 'RED')")
+        conn.execute("DELETE FROM alembic_version")
+        conn.execute("DROP TABLE zen_flex_days")
+
+    result = _alembic_upgrade(url)
+    assert result.returncode == 0, result.stderr[-2000:]
+    with sqlite3.connect(tmp_path / "client.db") as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchall() == [(_head(),)]
+        assert conn.execute("SELECT count(*) FROM tempo_days").fetchone() == (1,)
+        assert conn.execute("SELECT count(*) FROM zen_flex_days").fetchone() == (0,)
+
+
 # --- Moteur ------------------------------------------------------------------------------------
 
 
-async def test_moteur_sqlite_ecritures_concurrentes(tmp_path):
-    """Scheduler et API écrivent en même temps : WAL, attente sur verrou, clés étrangères actives."""
+async def test_moteur_sqlite_pragmas(tmp_path):
+    """Réglages de chaque connexion : WAL, attente sur verrou, clés étrangères actives."""
     from src.models.database import make_engine
 
     engine = make_engine(f"sqlite+aiosqlite:///{tmp_path / 'data' / 'client.db'}")
@@ -165,6 +185,29 @@ async def test_moteur_sqlite_ecritures_concurrentes(tmp_path):
             assert (await conn.execute(text("PRAGMA journal_mode"))).scalar() == "wal"
             assert (await conn.execute(text("PRAGMA foreign_keys"))).scalar() == 1
             assert (await conn.execute(text("PRAGMA busy_timeout"))).scalar() >= 5000
+    finally:
+        await engine.dispose()
+
+
+async def test_moteur_sqlite_ecritures_concurrentes(tmp_path):
+    """Scheduler et API écrivent en même temps : le second écrivain attend la fin de la transaction du
+    premier au lieu d'échouer sur « database is locked », et les deux écritures restent."""
+    from src.models.database import make_engine
+
+    engine = make_engine(f"sqlite+aiosqlite:///{tmp_path / 'client.db'}")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        async def write(day: str, hold: float) -> None:
+            async with engine.begin() as conn:  # verrou d'écriture tenu jusqu'au commit
+                await conn.execute(text("INSERT INTO tempo_days (id, date, color) VALUES (:d, :d, 'RED')"), {"d": day})
+                await asyncio.sleep(hold)
+
+        await asyncio.gather(write("2026-01-05", 1.0), write("2026-01-06", 0))
+
+        async with engine.connect() as conn:
+            assert (await conn.execute(text("SELECT count(*) FROM tempo_days"))).scalar() == 2
     finally:
         await engine.dispose()
 

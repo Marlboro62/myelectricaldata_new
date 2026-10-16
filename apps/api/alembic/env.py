@@ -3,7 +3,7 @@ from logging.config import fileConfig
 
 from typing import Any
 
-from sqlalchemy import inspect, pool
+from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -71,9 +71,10 @@ def run_migrations_offline() -> None:
 def include_object(obj: Any, name: str | None, type_: str, reflected: bool, compare_to: Any) -> bool:
     """Autogenerate : ignorer ce qui est réservé à un autre dialecte (index partiels SQLite, `ddl_if`)."""
     ddl_if = getattr(obj, "_ddl_if", None)
-    if ddl_if is not None and ddl_if.dialect and ddl_if.dialect != context.get_context().dialect.name:
-        return False
-    return True
+    if ddl_if is None or not ddl_if.dialect:
+        return True
+    dialects = [ddl_if.dialect] if isinstance(ddl_if.dialect, str) else list(ddl_if.dialect)
+    return context.get_context().dialect.name in dialects
 
 
 def bootstrap_sqlite(connection: Connection) -> None:
@@ -82,6 +83,9 @@ def bootstrap_sqlite(connection: Connection) -> None:
     Les révisions historiques sont écrites pour PostgreSQL et ne s'appliquent pas à une base SQLite
     vide : le schéma vient des modèles (index partiels SQLite compris), puis la tête est posée. Les
     révisions suivantes s'appliquent ensuite normalement, et doivent donc aussi passer sous SQLite.
+
+    Rejouable : un premier démarrage interrompu laisse des tables déjà créées (create_all les saute)
+    et parfois une table alembic_version vide (le stamp la crée avant d'y écrire).
     """
     target_metadata.create_all(connection)
     context.get_context().stamp(context.script, "heads")
@@ -99,7 +103,9 @@ def do_run_migrations(connection: Connection) -> None:
 
     sqlite = connection.dialect.name == "sqlite"
     with context.begin_transaction():
-        if sqlite and not inspect(connection).has_table("alembic_version"):
+        # Aucune révision enregistrée (table alembic_version absente OU vide) : base neuve, ou amorçage
+        # interrompu avant la pose de la tête. Rejouer les révisions PostgreSQL casserait sur les tables déjà là.
+        if sqlite and not context.get_context().get_current_heads():
             bootstrap_sqlite(connection)
         else:
             context.run_migrations()
