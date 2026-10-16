@@ -70,21 +70,20 @@ export function rollingYearPeriods(mostRecent: Date, oldest: Date): Array<{ star
 const isoDay = (date: Date) => date.toISOString().slice(0, 10)
 
 /**
- * Morceaux de 365 jours au plus d'une plage [start, end[ (YYYY-MM-DD) pour les appels journaliers.
- * La fin de chaque appel est exclue par l'API (client local comme passerelle, comme dateFin Enedis) :
- * chaque morceau commence donc là où finit le précédent. Une fin incluse (`end - 1 jour`, puis le
- * suivant à `end + 1 jour`) perdrait un jour à chaque frontière.
+ * Morceaux de 365 jours au plus d'une plage [start, end] à fin INCLUSE (YYYY-MM-DD), pour les appels
+ * journaliers : le client API ajoute un jour à la fin avant l'appel (`toExclusiveEnd`, l'API excluant la
+ * sienne), donc chaque morceau reprend au lendemain de la fin du précédent. Reprendre à la fin du précédent
+ * lirait deux fois le jour de frontière.
  */
 export function splitYearlyChunks(start: string, end: string): Array<{ start: string; end: string }> {
   const endMs = Date.parse(end)
-  if (!(Date.parse(start) < endMs)) return [{ start, end }]
+  if (!(Date.parse(start) <= endMs)) return [{ start, end }]
   const chunks: Array<{ start: string; end: string }> = []
-  let current = new Date(start)
-  while (current.getTime() < endMs) {
-    const next = new Date(current.getTime() + 365 * DAY_MS)
-    const chunkEnd = next.getTime() < endMs ? next : new Date(endMs)
-    chunks.push({ start: isoDay(current), end: isoDay(chunkEnd) })
-    current = chunkEnd
+  let current = Date.parse(start)
+  while (current <= endMs) {
+    const chunkEnd = Math.min(current + 364 * DAY_MS, endMs)
+    chunks.push({ start: isoDay(new Date(current)), end: isoDay(new Date(chunkEnd)) })
+    current = chunkEnd + DAY_MS
   }
   return chunks
 }

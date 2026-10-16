@@ -57,7 +57,7 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
         })
       }
 
-      // Morceaux de 365 jours à frontière partagée : la fin de chaque appel est exclue par l'API (MED-64)
+      // Morceaux de 365 jours, fin incluse, chacun repris au lendemain du précédent (MED-64)
       const yearlyChunks = splitYearlyChunks(start, dateRange.end)
 
       // Fetch all chunks in parallel

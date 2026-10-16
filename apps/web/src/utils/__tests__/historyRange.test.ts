@@ -100,33 +100,38 @@ describe('rollingYearPeriods', () => {
   })
 })
 
-// MED-64 : les appels journaliers excluent leur fin (client local et passerelle) : les morceaux se touchent
+// MED-64 : fin incluse côté interface (toExclusiveEnd ajoute un jour à l'appel) : les morceaux se suivent sans se chevaucher
 describe('splitYearlyChunks', () => {
   const days = (start: string, end: string) => {
     const out: string[] = []
-    for (let t = Date.parse(start); t < Date.parse(end); t += 24 * 60 * 60 * 1000) out.push(new Date(t).toISOString().slice(0, 10))
+    for (let t = Date.parse(start); t <= Date.parse(end); t += 24 * 60 * 60 * 1000) out.push(new Date(t).toISOString().slice(0, 10))
     return out
   }
 
-  it('couvre chaque jour de [start, end[ une seule fois, 29 février compris', () => {
-    const chunks = splitYearlyChunks('2019-03-01', '2026-10-16')
+  it('couvre chaque jour de [start, end] une seule fois, 29 février compris', () => {
+    const chunks = splitYearlyChunks('2019-03-01', '2026-10-15')
     const covered = chunks.flatMap((c) => days(c.start, c.end))
 
     expect(chunks[0].start).toBe('2019-03-01')
-    expect(chunks[chunks.length - 1].end).toBe('2026-10-16')
-    chunks.slice(1).forEach((c, i) => expect(c.start).toBe(chunks[i].end))
-    expect(covered).toEqual(days('2019-03-01', '2026-10-16'))
-    expect(covered).toContain('2020-02-29')
+    expect(chunks[chunks.length - 1].end).toBe('2026-10-15')
+    expect(covered).toEqual(days('2019-03-01', '2026-10-15'))
+    expect(covered.filter((d) => d === '2020-02-29')).toHaveLength(1)
+  })
+
+  it('chaque morceau reprend au lendemain de la fin du précédent', () => {
+    const chunks = splitYearlyChunks('2019-03-01', '2026-10-15')
+
+    chunks.slice(1).forEach((c, i) => expect(days(chunks[i].end, c.start)).toHaveLength(2))
   })
 
   it('365 jours au plus par morceau', () => {
-    splitYearlyChunks('2019-03-01', '2026-10-16').forEach((c) => expect(days(c.start, c.end).length).toBeLessThanOrEqual(365))
+    splitYearlyChunks('2019-03-01', '2026-10-15').forEach((c) => expect(days(c.start, c.end).length).toBeLessThanOrEqual(365))
   })
 
-  it('plage courte, vide ou inversée : un seul morceau tel quel', () => {
-    expect(splitYearlyChunks('2026-01-01', '2026-10-16')).toEqual([{ start: '2026-01-01', end: '2026-10-16' }])
-    expect(splitYearlyChunks('2026-10-16', '2026-10-16')).toEqual([{ start: '2026-10-16', end: '2026-10-16' }])
-    expect(splitYearlyChunks('2026-10-17', '2026-10-16')).toEqual([{ start: '2026-10-17', end: '2026-10-16' }])
+  it('plage courte, d un jour ou inversée : un seul morceau tel quel', () => {
+    expect(splitYearlyChunks('2026-01-01', '2026-10-15')).toEqual([{ start: '2026-01-01', end: '2026-10-15' }])
+    expect(splitYearlyChunks('2026-10-15', '2026-10-15')).toEqual([{ start: '2026-10-15', end: '2026-10-15' }])
+    expect(splitYearlyChunks('2026-10-17', '2026-10-15')).toEqual([{ start: '2026-10-17', end: '2026-10-15' }])
   })
 })
 

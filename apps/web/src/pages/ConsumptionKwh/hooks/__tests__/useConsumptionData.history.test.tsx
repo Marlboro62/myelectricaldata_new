@@ -49,7 +49,7 @@ describe('useConsumptionData : historique local de plus de 3 ans', () => {
     expect(starts(enedisApi.getMaxPower)[0]).toBe('2019-03-02')
   })
 
-  it('les morceaux annuels se touchent (fin exclue par l API) : aucun jour perdu à leurs frontières', async () => {
+  it('les morceaux annuels se suivent sans chevauchement : le jour de frontière n est lu qu une fois', async () => {
     syncApi.getStatusPdl.mockResolvedValue({ sync_types: { consumption_daily: { oldest_data_date: '2019-03-01' } } })
 
     render()
@@ -58,7 +58,8 @@ describe('useConsumptionData : historique local de plus de 3 ans', () => {
     const ranges = (enedisApi.getConsumptionDaily.mock.calls as unknown[][])
       .map((call) => call[1] as { start: string; end: string })
       .sort((a, b) => a.start.localeCompare(b.start))
-    ranges.slice(1).forEach((r, i) => expect(r.start).toBe(ranges[i].end))
+    const nextDay = (day: string) => new Date(Date.parse(day) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    ranges.slice(1).forEach((r, i) => expect(r.start).toBe(nextDay(ranges[i].end)))
     expect(ranges[ranges.length - 1].end).toBe(WINDOW.end)
   })
 
