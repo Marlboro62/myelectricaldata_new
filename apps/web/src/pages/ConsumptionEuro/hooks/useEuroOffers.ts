@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { energyApi } from '@/api/energy'
-import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
 import { isOfferExpired } from '@/utils/offers'
 import type { SelectedOfferWithProvider } from '../types/euro.types'
 
@@ -12,9 +11,8 @@ interface UseEuroOffersParams {
 
 export function useEuroOffers({ selectedOfferId, comparisonOfferId }: UseEuroOffersParams) {
   // Fetch providers
-  const { data: providersResponse } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: energyApi.getProviders,
+  const { data: providersData } = useQuery({
+    ...providersQueryOptions(),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -24,7 +22,7 @@ export function useEuroOffers({ selectedOfferId, comparisonOfferId }: UseEuroOff
     staleTime: 5 * 60 * 1000,
   })
 
-  const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
+  const providers = useMemo(() => providersData || [], [providersData])
   const allOffers = useMemo(() => offersData || [], [offersData])
 
   // Get selected offer with provider name

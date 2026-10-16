@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { EnergyOffer, EnergyProvider } from '@/api/energy'
 import { energyApi } from '@/api/energy'
-import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
 import { useEuroOffers } from '../useEuroOffers'
 
 vi.mock('@/api/energy', () => ({
@@ -114,5 +114,19 @@ describe('useEuroOffers : offre du PDL close', () => {
     await waitFor(() => expect(result.current.selectedOfferWithProvider).not.toBeNull())
     expect(result.current.selectedOfferWithProvider?.id).toBe(CLOSED_PDL_OFFER.id)
     expect(energyApi.getOffers).not.toHaveBeenCalled()
+  })
+
+  // Revue MED-67 : même règle pour ['energy-providers'], partagée avec le Simulateur et la contribution
+  it('relit le cache des fournisseurs rempli par une autre page : nom du fournisseur et comparateur', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    queryClient.setQueryData(providersQueryOptions().queryKey, PROVIDERS)
+    vi.mocked(energyApi.getProviders).mockRejectedValue(new Error('API injoignable'))
+
+    const { result } = renderOffers({ selectedOfferId: CLOSED_PDL_OFFER.id, comparisonOfferId: null }, queryClient)
+
+    await waitFor(() => expect(result.current.selectedOfferWithProvider).not.toBeNull())
+    expect(result.current.selectedOfferWithProvider?.providerName).toBe('Ecodigo')
+    expect(result.current.providers.map((p) => p.id)).toEqual(['ecodigo', 'edf'])
+    expect(energyApi.getProviders).not.toHaveBeenCalled()
   })
 })

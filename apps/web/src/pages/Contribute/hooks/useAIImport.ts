@@ -210,11 +210,10 @@ export function useAIImport(state: AllOffersState) {
     try {
       // Rafraîchir les offres depuis le serveur avant comparaison
       // (évite les faux "Déjà en base" si des offres ont été supprimées ailleurs)
-      const freshOffers = await queryClient.fetchQuery({
+      const currentOffers = await queryClient.fetchQuery({
         ...offersWithHistoryQueryOptions(),
         staleTime: 0,
       })
-      const currentOffers = Array.isArray(freshOffers) ? freshOffers : []
 
       // Nettoyer le JSON
       let cleaned = aiJsonInput.trim()

@@ -125,7 +125,7 @@ export function OfferPricingCard({
             {isOfferClosed && (
               <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded">
                 {selectedOffer.valid_to
-                  ? `Offre close depuis le ${new Date(selectedOffer.valid_to).toLocaleDateString('fr-FR')}`
+                  ? `Offre close depuis le ${new Date(selectedOffer.valid_to).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}`
                   : 'Offre close'}
               </span>
             )}

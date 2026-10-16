@@ -5,12 +5,13 @@ import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { LoadingPlaceholder } from '@/components/LoadingPlaceholder'
 import { AnimatedSection } from '@/components/AnimatedSection'
 import { PeriodSelector } from '@/components/PeriodSelector'
-import { energyApi, type EnergyProvider, type EnergyOffer } from '@/api/energy'
-import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
+import type { EnergyProvider, EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
 import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import jsPDF from 'jspdf'
 import { logger } from '@/utils/logger'
+import { isOfferExpired } from '@/utils/offers'
 import { buildMeasure, getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh } from '@/utils/enedisMeasure'
 import { ModernButton } from './Simulator/components/ModernButton'
 import { useIsDemo } from '@/hooks/useIsDemo'
@@ -27,12 +28,6 @@ function isWeekend(dateString: string): boolean {
   return dayOfWeek === 0 || dayOfWeek === 6 // 0 = Sunday, 6 = Saturday
 }
 
-// Vérifie si une offre est expirée (inactive ou hors période de validité)
-function isExpiredOffer(offer: { valid_to?: string | null; is_active?: boolean }): boolean {
-  if (offer.is_active === false) return true
-  if (!offer.valid_to) return false
-  return new Date(offer.valid_to) < new Date()
-}
 
 // Helper function to check if a date is in winter season (November to March)
 function isWinterSeason(dateString: string): boolean {
@@ -157,14 +152,7 @@ export default function Simulator() {
 
   // Fetch energy providers and offers
   const { data: providersDataRaw, isLoading: providersLoading } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: async () => {
-      const response = await energyApi.getProviders()
-      if (response.success && Array.isArray(response.data)) {
-        return response.data as EnergyProvider[]
-      }
-      return []
-    },
+    ...providersQueryOptions(),
     staleTime: 0,
   })
 
@@ -179,12 +167,12 @@ export default function Simulator() {
 
   // Toutes les offres (y compris périmées) pour retrouver l'offre de l'utilisateur
   const allOffersIncludingExpired = useMemo(() => {
-    return Array.isArray(offersDataRaw) ? offersDataRaw : []
+    return offersDataRaw ?? []
   }, [offersDataRaw])
 
   // Offres actives uniquement pour la simulation principale
   const offersData = useMemo(() => {
-    return allOffersIncludingExpired.filter((o) => !isExpiredOffer(o))
+    return allOffersIncludingExpired.filter((o) => !isOfferExpired(o))
   }, [allOffersIncludingExpired])
 
   // Selected PDL from global store + reference offer for shared PDLs
@@ -2949,7 +2937,7 @@ export default function Simulator() {
                     const isExpanded = expandedRows.has(result.offerId)
                     // Check if this is the user's current offer
                     const isCurrentOffer = currentOfferResult?.offerId === result.offerId
-                    const isCurrentOfferExpired = isCurrentOffer && result.offer && isExpiredOffer(result.offer)
+                    const isCurrentOfferExpired = isCurrentOffer && result.offer && isOfferExpired(result.offer)
                     // Calculate difference from current offer (if exists) or best offer
                     const referenceResult = currentOfferResult || displayResults[0]
                     const costDifferenceFromReference = result.totalCost - referenceResult.totalCost

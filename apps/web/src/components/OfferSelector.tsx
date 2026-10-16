@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Building2, Zap, Tag, X, AlertTriangle, Loader2, ChevronDown, Search } from 'lucide-react'
-import { energyApi, EnergyOffer } from '@/api/energy'
-import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
+import type { EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
 import { isOfferExpired } from '@/utils/offers'
 
 interface OfferSelectorProps {
@@ -57,9 +57,8 @@ export default function OfferSelector({
   // refetchOnMount: 'always' force un fetch frais à chaque mount pour éviter
   // les sélecteurs vides quand les données ne sont pas en cache (bug race condition)
   // placeholderData: garde les données précédentes pendant un refetch
-  const { data: providersResponse, isLoading: isLoadingProviders, isFetching: isFetchingProviders } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: energyApi.getProviders,
+  const { data: providersData, isLoading: isLoadingProviders, isFetching: isFetchingProviders } = useQuery({
+    ...providersQueryOptions(),
     staleTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     placeholderData: keepPreviousData,
@@ -74,7 +73,7 @@ export default function OfferSelector({
   })
 
   // Stabilize providers and offers arrays
-  const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
+  const providers = useMemo(() => providersData || [], [providersData])
   const allOffers = useMemo(() => offersData || [], [offersData])
 
   // Find selected offer details
