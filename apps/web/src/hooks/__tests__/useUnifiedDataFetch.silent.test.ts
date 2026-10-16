@@ -19,6 +19,8 @@ vi.mock('@/api/enedis', () => ({
 vi.mock('@/stores/notificationStore', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), loading: vi.fn(() => 'id'), dismiss: vi.fn() },
 }))
+// Statut de synchro local (MED-64) : fenêtres Enedis par défaut
+vi.mock('@/utils/localSyncStatus', () => ({ loadLocalSyncStatus: vi.fn().mockResolvedValue(null) }))
 const broadcast = vi.fn()
 vi.mock('../useCacheBroadcast', () => ({ useCacheBroadcast: () => ({ broadcast, subscribe: vi.fn() }) }))
 

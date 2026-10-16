@@ -49,6 +49,13 @@ describe('computeSyncSignature', () => {
     expect(before).not.toBe(after)
   })
 
+  it('change quand un import V1 recule la donnée la plus ancienne (MED-64)', () => {
+    const before = status('2026-10-15', '2026-10-15')
+    const after = status('2026-10-15', '2026-10-15')
+    after.sync_types.consumption_daily = { ...after.sync_types.consumption_daily, oldest_data_date: '2021-01-01' }
+    expect(computeSyncSignature(before)).not.toBe(computeSyncSignature(after))
+  })
+
   it("ne dépend pas de l'ordre des types de synchro", () => {
     const s1 = status('2026-10-15', '2026-10-14')
     const s2: PdlSyncStatus = {
@@ -93,6 +100,7 @@ describe('useClientAutoRefresh', () => {
     vi.useFakeTimers()
     localStorage.clear()
     vi.mocked(syncApi.getStatusPdl).mockReset()
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
   })
 
   afterEach(() => {
@@ -112,12 +120,24 @@ describe('useClientAutoRefresh', () => {
   it('mémorise la signature après une récupération réussie', async () => {
     const s = status('2026-10-15', '2026-10-15')
     mockStatus(s)
+    let cached = false
+    const refresh = vi.fn().mockImplementation(async () => { cached = true })
+
+    renderHook(() => useClientAutoRefresh({ usagePointId: PDL, enabled: true, hasCachedData: () => cached, refresh }))
+    await flush()
+
+    expect(localStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBe(computeSyncSignature(s))
+  })
+
+  it('ne mémorise rien quand la récupération laisse le cache vide (erreurs avalées par fetchAllData)', async () => {
+    mockStatus(status('2026-10-15', '2026-10-15'))
     const refresh = vi.fn().mockResolvedValue(undefined)
 
     renderHook(() => useClientAutoRefresh({ usagePointId: PDL, enabled: true, hasCachedData: () => false, refresh }))
     await flush()
 
-    expect(localStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBe(computeSyncSignature(s))
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(SYNC_SIGNATURE_KEY_PREFIX + PDL)).toBeNull()
   })
 
   it('ne récupère pas quand le cache est à jour de la dernière synchro', async () => {
