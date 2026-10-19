@@ -1206,6 +1206,11 @@ class HomeAssistantExporter(BaseExporter):
     # =========================================================================
 
     @staticmethod
+    def _previous_year_range(today: date) -> tuple[date, date]:
+        """Année civile précédente complète : 1er janvier au 31 décembre de l'an dernier"""
+        return date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+
+    @staticmethod
     def _safe_evolution(current: float, previous: float) -> float:
         """Calcule le pourcentage d'évolution, retourne 0 si previous est 0"""
         if previous == 0:
@@ -1495,6 +1500,13 @@ class HomeAssistantExporter(BaseExporter):
 
         yearly_evolution = self._safe_evolution(current_year_kwh, current_year_ly_kwh)
 
+        # Année civile précédente complète (A-1, du 1er janvier au 31 décembre)
+        last_year_start, last_year_end = self._previous_year_range(today)
+        last_year_wh = await stats.get_date_range_total(
+            pdl, last_year_start, last_year_end, direction
+        )
+        last_year_kwh = round(last_year_wh / 1000, 2)
+
         # =====================================================================
         # PEAK/OFFPEAK PERCENT (année courante)
         # =====================================================================
@@ -1650,6 +1662,7 @@ class HomeAssistantExporter(BaseExporter):
             "current_year": current_year_kwh,
             "current_year_last_year": current_year_ly_kwh,
             "yearly_evolution": yearly_evolution,
+            "last_year": last_year_kwh,
             # HP/HC
             "peak_offpeak_percent": peak_offpeak_percent,
             # Historique journalier (newest-first, comme dailyweek)
