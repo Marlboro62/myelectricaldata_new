@@ -1206,6 +1206,13 @@ class HomeAssistantExporter(BaseExporter):
     # =========================================================================
 
     @staticmethod
+    def _same_day_last_year(day: date) -> date:
+        """Même jour l'an dernier ; un 29 février devient le 28"""
+        if day.month == 2 and day.day == 29:
+            return date(day.year - 1, 2, 28)
+        return day.replace(year=day.year - 1)
+
+    @staticmethod
     def _previous_year_range(today: date) -> tuple[date, date]:
         """Année civile précédente complète : 1er janvier au 31 décembre de l'an dernier"""
         return date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
@@ -1492,7 +1499,7 @@ class HomeAssistantExporter(BaseExporter):
 
         # Même période A-1
         first_of_year_ly = date(today.year - 1, 1, 1)
-        yesterday_ly = date(today.year - 1, yesterday.month, min(yesterday.day, 28))
+        yesterday_ly = self._same_day_last_year(yesterday)
         current_year_ly_wh = await stats.get_date_range_total(
             pdl, first_of_year_ly, yesterday_ly, direction
         )

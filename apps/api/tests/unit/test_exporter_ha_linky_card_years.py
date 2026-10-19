@@ -18,3 +18,18 @@ from src.services.exporters.home_assistant import HomeAssistantExporter
 )
 def test_previous_year_range_annee_civile_complete(today: date, expected: tuple[date, date]) -> None:
     assert HomeAssistantExporter._previous_year_range(today) == expected
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        # Fin de mois : la comparaison « à date » allait jusqu'au 28 de l'an dernier (2 à 3 jours de moins)
+        (date(2026, 10, 30), date(2025, 10, 30)),
+        (date(2026, 1, 31), date(2025, 1, 31)),
+        (date(2026, 6, 15), date(2025, 6, 15)),
+        # 29 février : pas de 29 l'année précédente
+        (date(2028, 2, 29), date(2027, 2, 28)),
+    ],
+)
+def test_same_day_last_year(day: date, expected: date) -> None:
+    assert HomeAssistantExporter._same_day_last_year(day) == expected
