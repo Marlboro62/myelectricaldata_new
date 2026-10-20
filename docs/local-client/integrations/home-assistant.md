@@ -57,6 +57,7 @@ Dans l'interface web : **Exporter** > **Home Assistant**.
 | `mqtt_use_tls` | `false` | Connexion TLS au broker |
 | `discovery_prefix` | `homeassistant` | Préfixe de discovery de **votre** intégration MQTT |
 | `entity_prefix` | `myelectricaldata` | Préfixe des topics, `unique_id` et `entity_id` suggérés (minuscules, chiffres et `_`). Permet à deux instances de publier sur le même Home Assistant ; le changer crée de nouvelles entités, sans l'historique des anciennes |
+| `entity_language` | `fr` | Langue des noms affichés des entités : `fr` (« Consommation », « Prix bleu HC », « Infos Tempo »…) ou `en` (noms historiques : « consumption », « Price Blue HC », « Tempo Info »…). Seuls les noms changent : `unique_id`, `entity_id` et états restent identiques, les cartes et automatisations continuent de fonctionner. Un nom renommé dans Home Assistant reste prioritaire |
 | `ha_url`, `ha_token` | | Home Assistant et token, pour les statistiques |
 | `statistic_id_prefix` | `myelectricaldata` | Préfixe des statistiques du panneau Énergie |
 

@@ -159,6 +159,57 @@ TEMPO_PRICE_NAMES = {
     "red_hp": "Red HP",
 }
 
+# Noms affichés des entités (option entity_language, « fr » par défaut). Seul le nom change :
+# unique_id, entity_id suggéré et états restent identiques, en français comme en anglais.
+# L'anglais reprend les noms historiques de l'export.
+ENTITY_NAMES: dict[str, dict[str, str]] = {
+    "fr": {
+        "consumption": "Consommation",
+        "production": "Production",
+        "consumption_last": "Consommation {days} derniers jours",
+        "production_last": "Production {days} derniers jours",
+        "consumption_period": "Consommation {period} {tariff}",
+        "today": "Aujourd'hui",
+        "tomorrow": "Demain",
+        "ecowatt_j0": "Aujourd'hui",
+        "ecowatt_j1": "Demain",
+        "ecowatt_j2": "Après-demain",
+        "tempo_days_blue": "Jours bleus",
+        "tempo_days_white": "Jours blancs",
+        "tempo_days_red": "Jours rouges",
+        "tempo_info": "Infos Tempo",
+        "tempo_price": "Prix {color} {tariff}",
+    },
+    "en": {
+        "consumption": "consumption",
+        "production": "production",
+        "consumption_last": "consumption last{days}day",
+        "production_last": "production last{days}day",
+        "consumption_period": "consumption {period} {tariff}",
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "ecowatt_j0": "j0",
+        "ecowatt_j1": "j1",
+        "ecowatt_j2": "j2",
+        "tempo_days_blue": "Days Blue",
+        "tempo_days_white": "Days White",
+        "tempo_days_red": "Days Red",
+        "tempo_info": "Tempo Info",
+        "tempo_price": "Price {color} {tariff}",
+    },
+}
+# Mots insérés dans les noms : période des capteurs HP/HC, couleur et tarif des prix Tempo
+ENTITY_WORDS: dict[str, dict[str, str]] = {
+    "fr": {
+        "yesterday": "hier", "this_week": "semaine", "this_month": "mois", "this_year": "année",
+        "hc": "HC", "hp": "HP", "blue": "bleu", "white": "blanc", "red": "rouge",
+    },
+    "en": {
+        "yesterday": "yesterday", "this_week": "this week", "this_month": "this month", "this_year": "this year",
+        "hc": "hc", "hp": "hp", "blue": "Blue", "white": "White", "red": "Red",
+    },
+}
+
 # Software version for device info
 SOFTWARE_VERSION = "1.8.0"
 
@@ -224,6 +275,17 @@ class HomeAssistantExporter(BaseExporter):
         if re.search(r"[\s/#+]", self.prefix):
             raise ValueError(f"Invalid entity_prefix {self.prefix!r}: no spaces, '/', '#' or '+'")
         self.discovery_prefix: str = self.config.get("discovery_prefix", "homeassistant")
+        # Langue des noms affichés des entités : fr (défaut) ou en (noms historiques)
+        language = str(self.config.get("entity_language") or "fr").lower()
+        self.entity_language: str = language if language in ENTITY_NAMES else "fr"
+
+    def _entity_name(self, key: str, **values: Any) -> str:
+        """Nom affiché d'une entité dans la langue choisie (option entity_language)"""
+        return ENTITY_NAMES[getattr(self, "entity_language", "fr")][key].format(**values)
+
+    def _entity_word(self, key: str) -> str:
+        """Mot traduit (période, tarif ou couleur) pour composer un nom d'entité"""
+        return ENTITY_WORDS[getattr(self, "entity_language", "fr")].get(key, key.replace("_", " "))
 
     def _get_device_rte_tempo(self) -> dict[str, Any]:
         """Get device info for RTE Tempo
@@ -1025,7 +1087,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_consumption/{pdl}",
-            name="consumption",
+            name=self._entity_name("consumption"),
             unique_id=f"{self.prefix}_linky_{pdl}_consumption",
             device=device,
             state=yesterday_kwh,
@@ -1054,7 +1116,7 @@ class HomeAssistantExporter(BaseExporter):
             await self._publish_sensor_old_format(
                 client,
                 topic=f"{self.prefix}_consumption_last_{days_count}_day/{pdl}",
-                name=f"consumption last{days_count}day",
+                name=self._entity_name("consumption_last", days=days_count),
                 unique_id=f"{self.prefix}_linky_{pdl}_consumption_last{days_count}day",
                 device=device,
                 state=round(total_kwh, 2),
@@ -1095,7 +1157,11 @@ class HomeAssistantExporter(BaseExporter):
             await self._publish_sensor_old_format(
                 client,
                 topic=f"{self.prefix}_consumption_{sensor_key}/{pdl}",
-                name=f"consumption {sensor_key.replace('_', ' ')}",
+                name=self._entity_name(
+                    "consumption_period",
+                    period=self._entity_word(sensor_key.rsplit("_", 1)[0]),
+                    tariff=self._entity_word(sensor_key.rsplit("_", 1)[1]),
+                ),
                 unique_id=f"{self.prefix}_linky_{pdl}_consumption_{sensor_key}",
                 device=device,
                 state=value_kwh,
@@ -1152,7 +1218,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_production/{pdl}",
-            name="production",
+            name=self._entity_name("production"),
             unique_id=f"{self.prefix}_linky_{pdl}_production",
             device=device,
             state=yesterday_kwh,
@@ -1181,7 +1247,7 @@ class HomeAssistantExporter(BaseExporter):
             await self._publish_sensor_old_format(
                 client,
                 topic=f"{self.prefix}_production_last_{days_count}_day/{pdl}",
-                name=f"production last{days_count}day",
+                name=self._entity_name("production_last", days=days_count),
                 unique_id=f"{self.prefix}_linky_{pdl}_production_last{days_count}day",
                 device=device,
                 state=round(total_kwh, 2),
@@ -1678,7 +1744,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_{topic_dir}/{pdl}",
-            name=topic_dir,
+            name=self._entity_name(topic_dir),
             unique_id=f"{self.prefix}_linky_{pdl}_{topic_dir}",
             device=device,
             state=yesterday_kwh,
@@ -1748,7 +1814,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_rte/tempo_today",
-            name="Today",
+            name=self._entity_name("today"),
             unique_id=f"{self.prefix}_tempo_today",
             device=device_rte,
             state=today_color,
@@ -1770,7 +1836,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_rte/tempo_tomorrow",
-            name="Tomorrow",
+            name=self._entity_name("tomorrow"),
             unique_id=f"{self.prefix}_tempo_tomorrow",
             device=device_rte,
             state=tomorrow_color,
@@ -1838,7 +1904,7 @@ class HomeAssistantExporter(BaseExporter):
             await self._publish_sensor_old_format(
                 client,
                 topic=f"{self.prefix}_edf/tempo_days_{color_name}",
-                name=f"Days {color.value.capitalize()}",
+                name=self._entity_name(f"tempo_days_{color_name}"),
                 unique_id=f"{self.prefix}_tempo_days_{color_name}",
                 device=device_edf,
                 state=used,
@@ -1862,7 +1928,7 @@ class HomeAssistantExporter(BaseExporter):
         await self._publish_sensor_old_format(
             client,
             topic=f"{self.prefix}_edf/tempo_info",
-            name="Tempo Info",
+            name=self._entity_name("tempo_info"),
             unique_id=f"{self.prefix}_tempo_info",
             device=device_edf,
             state=today_color,
@@ -1895,7 +1961,11 @@ class HomeAssistantExporter(BaseExporter):
             await self._publish_sensor_old_format(
                 client,
                 topic=f"{self.prefix}_edf/tempo_price_{price_key}",
-                name=f"Price {price_name}",
+                name=self._entity_name(
+                    "tempo_price",
+                    color=self._entity_word(price_key.split("_")[0]),
+                    tariff=self._entity_word(price_key.split("_")[1]).upper(),
+                ),
                 unique_id=f"{self.prefix}_tempo_price_{price_key}",
                 device=device_edf,
                 state=price_value,
@@ -1979,7 +2049,8 @@ class HomeAssistantExporter(BaseExporter):
         device = self._get_device_edf_zen_flex()
         count = 0
 
-        for key, name, day in (("today", "Today", today), ("tomorrow", "Tomorrow", today + timedelta(days=1))):
+        for key, day in (("today", today), ("tomorrow", today + timedelta(days=1))):
+            name = self._entity_name(key)
             result = await db.execute(select(ZenFlexDay).where(ZenFlexDay.id == day.isoformat()))
             row = result.scalar_one_or_none()
             day_type = row.day_type.value if row else "unknown"
@@ -2066,7 +2137,7 @@ class HomeAssistantExporter(BaseExporter):
                 await self._publish_sensor_old_format(
                     client,
                     topic=f"{self.prefix}_rte/ecowatt_{day_name}",
-                    name=day_name,
+                    name=self._entity_name(f"ecowatt_{day_name}"),
                     unique_id=f"{self.prefix}_ecowatt_{day_name}",
                     device=device,
                     state=day_value,
@@ -2079,7 +2150,7 @@ class HomeAssistantExporter(BaseExporter):
                 await self._publish_sensor_old_format(
                     client,
                     topic=f"{self.prefix}_rte/ecowatt_{day_name}",
-                    name=day_name,
+                    name=self._entity_name(f"ecowatt_{day_name}"),
                     unique_id=f"{self.prefix}_ecowatt_{day_name}",
                     device=device,
                     state="unknown",
