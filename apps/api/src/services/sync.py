@@ -1161,6 +1161,9 @@ class SyncService:
         """Sync energy offers from remote MyElectricalData gateway
 
         Full mirror sync: creates, updates, and DELETES local offers to match remote.
+        Les offres inactives ou expirées sont aussi synchronisées (include_history) : elles restent
+        sélectionnables (« Afficher les offres obsolètes ») et une offre choisie qui devient obsolète
+        côté passerelle n'est plus supprimée localement, ce qui effaçait la sélection du PDL.
 
         Returns:
             Dict with sync results (created, updated, unchanged, deleted counts)
@@ -1175,7 +1178,7 @@ class SyncService:
         }
 
         try:
-            response = await self.adapter.get_energy_offers()
+            response = await self.adapter.get_energy_offers(include_history=True)
             remote_offers = response.get("data", [])
 
             if not remote_offers and response.get("success") is False:

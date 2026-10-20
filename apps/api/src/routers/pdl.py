@@ -483,14 +483,15 @@ async def update_pdl_selected_offer(
             },
         )
 
-    # Validate the offer exists and is active
-    offer_result = await db.execute(select(EnergyOffer).where(EnergyOffer.id == offer_data.selected_offer_id, EnergyOffer.is_active.is_(True)))
+    # L'offre doit exister ; une offre obsolète (inactive) reste sélectionnable : le sélecteur
+    # les propose (« Afficher les offres obsolètes ») et le calcul des coûts ne dépend pas de is_active
+    offer_result = await db.execute(select(EnergyOffer).where(EnergyOffer.id == offer_data.selected_offer_id))
     offer = offer_result.scalar_one_or_none()
 
     if not offer:
         return APIResponse(
             success=False,
-            error=ErrorDetail(code="OFFER_NOT_FOUND", message="Energy offer not found or not active")
+            error=ErrorDetail(code="OFFER_NOT_FOUND", message="Energy offer not found")
         )
 
     # Update PDL with selected offer and sync pricing_option
