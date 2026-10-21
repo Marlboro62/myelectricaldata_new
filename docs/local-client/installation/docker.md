@@ -15,7 +15,7 @@ Les deux donnent le même client (mêmes pages, mêmes exports). Passer de l'un 
 
 - Docker 24+ et Docker Compose v2
 - Accès réseau vers `www.v2.myelectricaldata.fr`
-- Une machine **amd64** (x86_64) : les images ne sont pas encore publiées pour ARM (voir [Raspberry Pi](#installation-sur-raspberry-pi))
+- Une machine **amd64** (x86_64) ou **arm64** (Raspberry Pi 4 ou 5 avec un système 64 bits, voir [Raspberry Pi](#installation-sur-raspberry-pi))
 
 Les images `ghcr.io/myelectricaldata/myelectricaldata_new/backend` et `.../frontend` sont publiques : aucun compte GitHub ni `docker login` n'est nécessaire.
 
@@ -127,12 +127,12 @@ Le scheduler lance une synchronisation quotidienne à 6h00.
 
 ## Installation sur Raspberry Pi
 
-:::caution Pas encore d'images ARM
-Les images publiées ne sont construites que pour **linux/amd64**. Sur un Raspberry Pi (ARM64 ou ARMv7), `docker compose up` échoue avec `no matching manifest for linux/arm64`. En attendant des images multi-architecture, utiliser une machine amd64.
+:::info Images multi-architecture
+Les images sont publiées pour **linux/amd64** et **linux/arm64** : Docker télécharge automatiquement celle qui correspond à la machine, l'installation est la même que sur un PC. Un système **32 bits** (ARMv7, `armv7l`) n'est pas pris en charge : installez un Raspberry Pi OS 64 bits.
 :::
 
 ```bash
-# Vérifier l'architecture (x86_64 attendu)
+# Vérifier l'architecture : aarch64 (Raspberry Pi 64 bits) ou x86_64 (PC)
 uname -m
 ```
 
