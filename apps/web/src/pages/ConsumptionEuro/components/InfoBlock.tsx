@@ -59,6 +59,7 @@ export function InfoBlock({ isExpanded, onToggle }: InfoBlockProps) {
                 <li>L'abonnement est calculé au <strong>prorata du nombre de jours</strong> de chaque mois</li>
                 <li>Les calculs utilisent des <strong>périodes glissantes de 365 jours</strong>, non des années calendaires</li>
                 <li>Les prix affichés sont <strong>TTC</strong> (toutes taxes comprises)</li>
+                <li>Le détail de chaque période montre la part de l'<strong>accise</strong> et de la <strong>TVA</strong> comprises dans ce total</li>
               </ul>
             </div>
           </div>
