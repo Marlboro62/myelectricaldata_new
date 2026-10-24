@@ -920,7 +920,7 @@ export default function HomeAssistant() {
                       type="password"
                       value={haToken}
                       onChange={(e) => setHaToken(e.target.value)}
-                      placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                      placeholder="Collez votre jeton d'accès longue durée"
                       className="w-full px-4 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
