@@ -290,6 +290,11 @@ Les entités créées par une version antérieure gardent leur ancien `entity_id
 ### Panneau Énergie vide ou sans coût
 
 - Vérifier `ha_url` et `ha_token` (erreur 401 : token invalide ou expiré)
+- Dans les logs, une passe Energy Dashboard affiche `[HA-WS] Lancement de l'import vers Energy Dashboard`
+  puis le nombre de statistiques importées. Si l'import n'a pas lieu, la raison est indiquée :
+  `[HA-WS] Import Energy Dashboard ignoré : URL et jeton Home Assistant manquants dans la configuration de l'export`
+  (ou `jeton … manquant`, ou `Energy Dashboard désactivé`). Une passe planifiée sans URL ou sans jeton
+  est alors en statut partiel, avec cette raison comme erreur
 - Sans offre sélectionnée sur le PDL, aucune statistique de coût n'est importée
 - Relancer un import complet des statistiques après un changement d'offre
 

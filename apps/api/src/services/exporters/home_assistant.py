@@ -580,6 +580,16 @@ class HomeAssistantExporter(BaseExporter):
         if mqtt_enabled:
             logger.info(f"[HA-MQTT] Full export completed: {results}")
 
+        # Import sauté : en donner la raison (issue #177). Une passe planifiée du seul Energy
+        # Dashboard (run_mqtt=False) activée mais sans URL ou jeton est une erreur, pas un succès.
+        skip_reason = self._energy_skip_reason(run_energy)
+        if skip_reason:
+            if run_mqtt or not self.config.get("energy_enabled", True):
+                logger.info(f"[HA-WS] Import Energy Dashboard ignoré : {skip_reason}")
+            else:
+                logger.warning(f"[HA-WS] Import Energy Dashboard ignoré : {skip_reason}")
+                results["errors"].append(f"energy_dashboard: {skip_reason}")
+
         # Import automatique vers le Energy Dashboard si activé et configuré
         if energy_enabled and self._has_websocket_config():
             try:
@@ -643,6 +653,9 @@ class HomeAssistantExporter(BaseExporter):
         mqtt_enabled = self.config.get("mqtt_enabled", True) and run_mqtt
         energy_enabled = self.config.get("energy_enabled", True) and run_energy
         has_ws = energy_enabled and self._has_websocket_config()
+        skip_reason = self._energy_skip_reason(run_energy)
+        if skip_reason:
+            logger.info(f"[HA-WS] Import Energy Dashboard ignoré : {skip_reason}")
 
         # Calcul du nombre total d'étapes
         mqtt_steps = (4 + len(usage_point_ids)) if mqtt_enabled else 0
@@ -2533,6 +2546,17 @@ class HomeAssistantExporter(BaseExporter):
     def _has_websocket_config(self) -> bool:
         """Check if WebSocket configuration is available"""
         return bool(self.config.get("ha_url") and self.config.get("ha_token"))
+
+    def _energy_skip_reason(self, run_energy: bool) -> str | None:
+        """Raison pour laquelle l'import Energy Dashboard demandé n'aura pas lieu (None s'il a lieu)"""
+        if not run_energy:
+            return None
+        if not self.config.get("energy_enabled", True):
+            return "Energy Dashboard désactivé dans la configuration de l'export"
+        missing = [label for key, label in (("ha_url", "URL"), ("ha_token", "jeton")) if not self.config.get(key)]
+        if missing:
+            return f"{' et '.join(missing)} Home Assistant manquant{'s' if len(missing) > 1 else ''} dans la configuration de l'export"
+        return None
 
     def _get_ws_url(self) -> str:
         """Get WebSocket URL from HA URL
