@@ -23,7 +23,9 @@ interface FormState {
   hp_price: string
 }
 
-const toText = (value: number | null | undefined) => (value == null ? '' : String(value))
+// L'API renvoie les montants au format de la base (« 18.36000 ») : affichés « 18,36 »
+const toText = (value: number | string | null | undefined) =>
+  value == null || value === '' || Number.isNaN(Number(value)) ? '' : String(Number(value)).replace('.', ',')
 
 // Accepte la virgule décimale (« 0,1885 »)
 const toNumber = (value: string): number | null => {
@@ -141,7 +143,7 @@ export default function CustomOfferForm({ selectedOfferId, subscribedPower, onSe
     )
   }
 
-  const priceInput = (field: keyof FormState, label: string, unit: string) => (
+  const priceInput = (field: keyof FormState, label: string, unit: string, placeholder = '0,0000') => (
     <label className="block text-sm">
       <span className="text-gray-600 dark:text-gray-400">{label}</span>
       <div className="flex items-center gap-2 mt-1">
@@ -151,7 +153,7 @@ export default function CustomOfferForm({ selectedOfferId, subscribedPower, onSe
           aria-label={label}
           value={form[field]}
           onChange={update(field)}
-          placeholder="0,0000"
+          placeholder={placeholder}
           className="input py-1.5"
           required
         />
@@ -197,7 +199,7 @@ export default function CustomOfferForm({ selectedOfferId, subscribedPower, onSe
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {priceInput('subscription_price', 'Abonnement', '€/mois')}
+        {priceInput('subscription_price', 'Abonnement', '€/mois', '0,00')}
         {form.offer_type === 'BASE' && priceInput('base_price', 'Prix du kWh', '€/kWh')}
       </div>
       {form.offer_type === 'HC_HP' && (

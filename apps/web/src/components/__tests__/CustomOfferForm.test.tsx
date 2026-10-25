@@ -81,8 +81,9 @@ describe('CustomOfferForm', () => {
       provider_id: 'custom-offers',
       name: 'Zen Fixe',
       offer_type: 'BASE',
-      subscription_price: 12.5,
-      base_price: 0.2,
+      // Montants tels que renvoyés par l'API (format de la base)
+      subscription_price: '12.50000' as unknown as number,
+      base_price: '0.20000' as unknown as number,
       power_kva: 6,
     })
     vi.mocked(energyApi.updateCustomOffer).mockResolvedValue({
@@ -93,7 +94,8 @@ describe('CustomOfferForm', () => {
     const onSelect = renderForm({ selectedOfferId: 'offre-1' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Modifier mes prix' }))
-    expect(screen.getByLabelText('Prix du kWh')).toHaveValue('0.2')
+    expect(screen.getByLabelText('Abonnement')).toHaveValue('12,5')
+    expect(screen.getByLabelText('Prix du kWh')).toHaveValue('0,2')
     fireEvent.change(screen.getByLabelText('Prix du kWh'), { target: { value: '0,2082' } })
     fireEvent.click(screen.getByRole('button', { name: /Enregistrer/ }))
 
