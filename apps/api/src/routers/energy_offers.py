@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timedelta, UTC
+from datetime import date, datetime, time, timedelta, UTC
+from zoneinfo import ZoneInfo
 from ..models import User, EnergyProvider, EnergyOffer, OfferContribution, ContributionMessage
 from ..models.database import get_db
 from ..schemas import APIResponse, ErrorDetail
@@ -30,6 +31,26 @@ def parse_iso_datetime(value: str | None) -> datetime | None:
         return None
 
 
+PARIS = ZoneInfo("Europe/Paris")
+
+
+def end_of_day(day: date) -> datetime:
+    """Dernière seconde d'un jour à l'heure de Paris, en UTC.
+
+    Une offre close « au 31/07 » reste en vigueur tout le 31/07 pour le simulateur et l'export HA,
+    qui comparent valid_to à l'instant présent ; le front, lui, lit le jour 'YYYY-MM-DD'.
+    """
+    return datetime.combine(day, time(23, 59, 59), tzinfo=PARIS).astimezone(UTC)
+
+
+def parse_valid_to(raw: str) -> datetime:
+    """valid_to d'une contribution : une date seule vaut jusqu'à la fin de ce jour, un instant ISO est gardé."""
+    if len(raw) == 10:
+        return end_of_day(date.fromisoformat(raw))
+    value = datetime.fromisoformat(raw)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 async def deactivate_previous_offers(
     db: AsyncSession,
     provider_id: str,
@@ -43,7 +64,8 @@ async def deactivate_previous_offers(
     Seule la même offre (même fournisseur, type, nom et puissance), ouverte et antérieure,
     est close : les autres offres du fournisseur, les puissances sœurs d'une même grille et
     une clôture déjà posée restent intactes. Les offres ne sont jamais supprimées pour
-    conserver l'historique. Fin à la veille : le front compare les périodes bornes incluses.
+    conserver l'historique. Fin à la veille, à minuit heure de Paris (end_of_day) : le front
+    compare les périodes bornes incluses, le simulateur et l'export HA à l'instant présent.
 
     Args:
         db: Session de base de données
@@ -67,7 +89,8 @@ async def deactivate_previous_offers(
     result = await db.execute(query)
     previous_offers = result.scalars().all()
 
-    valid_to = valid_from - timedelta(days=1)
+    start = valid_from if valid_from.tzinfo else valid_from.replace(tzinfo=UTC)
+    valid_to = end_of_day(start.astimezone(UTC).date() - timedelta(days=1))
     for offer in previous_offers:
         offer.valid_to = valid_to
         logger.info(f"[CONTRIBUTION] Désactivation offre: {offer.name} (id={offer.id}) - valid_to={valid_to}")
@@ -107,9 +130,7 @@ def apply_valid_to(offer: EnergyOffer, pricing: dict, log_prefix: str) -> None:
         return
     try:
         if isinstance(valid_to_raw, str):
-            valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-            if valid_to_date.tzinfo is None:
-                valid_to_date = valid_to_date.replace(tzinfo=UTC)
+            valid_to_date = parse_valid_to(valid_to_raw)
             offer.valid_to = valid_to_date
             logger.info(f"{log_prefix} Mise à jour valid_to: {offer.name} (id={offer.id}) -> {valid_to_date}")
     except (ValueError, TypeError):
@@ -164,9 +185,7 @@ async def apply_contribution_changes(
             if valid_to_raw:
                 try:
                     if isinstance(valid_to_raw, str):
-                        valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                        if valid_to_date.tzinfo is None:
-                            valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                        valid_to_date = parse_valid_to(valid_to_raw)
                 except (ValueError, TypeError):
                     logger.warning(f"[CONTRIBUTION] Invalid valid_to format: {valid_to_raw}")
             for variant in contribution.power_variants:
@@ -218,9 +237,7 @@ async def apply_contribution_changes(
             if valid_to_raw:
                 try:
                     if isinstance(valid_to_raw, str):
-                        valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                        if valid_to_date.tzinfo is None:
-                            valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                        valid_to_date = parse_valid_to(valid_to_raw)
                 except (ValueError, TypeError):
                     logger.warning(f"[CONTRIBUTION] Invalid valid_to format: {valid_to_raw}")
 
@@ -1383,9 +1400,7 @@ async def bulk_approve_contributions(
                 if valid_to_raw:
                     try:
                         if isinstance(valid_to_raw, str):
-                            valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                            if valid_to_date.tzinfo is None:
-                                valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                            valid_to_date = parse_valid_to(valid_to_raw)
                     except (ValueError, TypeError):
                         logger.warning(f"[BULK APPROVE] Invalid valid_to format: {valid_to_raw}")
 

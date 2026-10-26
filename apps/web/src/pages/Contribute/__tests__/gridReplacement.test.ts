@@ -53,8 +53,9 @@ describe('findOpenGridToClose', () => {
     expect(findOpenGridToClose(existantes, 'BasicWatt', '2026-01-01')).toEqual([])
   })
 
-  it('ignore une grille ouverte sans date de début (offre legacy)', () => {
-    expect(findOpenGridToClose([offre('l6', 'BasicWatt', 6)], 'BasicWatt', '2026-08-01')).toEqual([])
+  it("clôt une grille ouverte sans date de début (offre legacy), comme l'API", () => {
+    // Revue de la PR #158 : ignorée, elle chevauchait encore la grille importée et bloquait Soumettre
+    expect(ids(findOpenGridToClose([offre('l6', 'BasicWatt', 6)], 'BasicWatt', '2026-08-01'))).toEqual(['l6'])
   })
 })
 

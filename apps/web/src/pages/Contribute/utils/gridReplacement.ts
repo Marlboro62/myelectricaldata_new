@@ -1,7 +1,8 @@
 // Remplacement d'une grille tarifaire ouverte par une grille importée plus récente (MED-53, issue #145)
 //
 // Les périodes se comparent bornes incluses (periodsOverlap) : l'ancienne grille se clôt à la veille
-// du début de la nouvelle, sinon le contrôle de doublons les voit se chevaucher d'un jour.
+// du début de la nouvelle, sinon le contrôle de doublons les voit se chevaucher d'un jour. L'API
+// stocke cette veille à 23:59:59 heure de Paris (end_of_day) : l'offre reste en vigueur toute la journée.
 
 import type { EnergyOffer } from '@/api/energy'
 import { getCleanOfferName } from './offerPricing'
@@ -29,10 +30,10 @@ export function findOpenGridToClose(
   // Dates comparées en jour calendaire 'YYYY-MM-DD', comme dayBefore : indépendant du fuseau
   const name = getCleanOfferName(offerName).toLowerCase()
   const importDay = importValidFrom.slice(0, 10)
+  // Une grille ouverte sans date de début (legacy) se clôt aussi, comme côté API
   return existingForType.filter(o =>
     !o.valid_to &&
-    !!o.valid_from &&
-    o.valid_from.slice(0, 10) < importDay &&
+    (!o.valid_from || o.valid_from.slice(0, 10) < importDay) &&
     getCleanOfferName(o.name).toLowerCase() === name
   )
 }

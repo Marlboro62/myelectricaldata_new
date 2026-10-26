@@ -9,6 +9,7 @@ chemins doivent laisser la même base.
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
@@ -21,6 +22,8 @@ from src.routers import energy_offers
 ANCIENNE = datetime(2026, 2, 5, tzinfo=UTC)
 NOUVELLE = "2026-08-01"
 VEILLE = date(2026, 7, 31)
+# Fin de la veille à Paris : l'ancienne offre reste en vigueur tout le 31/07 (simulateur, export HA)
+FIN_VEILLE = datetime(2026, 7, 31, 23, 59, 59, tzinfo=ZoneInfo("Europe/Paris"))
 
 
 @pytest.fixture
@@ -172,3 +175,43 @@ async def test_ajout_historique_ne_ferme_rien(
         (9, ANCIENNE.date()): None,
         (6, date(2025, 2, 1)): date(2026, 2, 4),
     }
+
+
+async def fins(db: AsyncSession, nom: str) -> dict[int, datetime | None]:
+    """Puissance -> instant de fin (UTC), pour les offres d'un nom ouvertes avant la nouvelle grille."""
+    db.expire_all()
+    lignes = (await db.execute(select(EnergyOffer).where(EnergyOffer.name == nom))).scalars().all()
+    return {
+        o.power_kva: (o.valid_to.replace(tzinfo=o.valid_to.tzinfo or UTC) if o.valid_to else None)
+        for o in lignes
+        if o.valid_from is None or o.valid_from.date() < date(2026, 8, 1)
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approuver", CHEMINS)
+async def test_la_veille_reste_couverte_jusqu_a_minuit_heure_de_paris(
+    db: AsyncSession, enercoop: SimpleNamespace, approuver: Approbation
+) -> None:
+    """Revue de la PR #158 : clôturée à la veille 00:00 UTC, l'ancienne offre expirait dès le début du 31/07.
+
+    Clôture explicite de l'import (date seule) et clôture automatique d'une nouvelle puissance :
+    les deux posent la dernière seconde du 31/07 à Paris.
+    """
+    explicite = cloture(enercoop, enercoop.basicwatt[3], VEILLE.isoformat())
+    await approuver(db, await soumettre(db, [explicite, nouvelle_puissance(enercoop, 6)]))
+
+    assert await fins(db, "BasicWatt") == {3: FIN_VEILLE, 6: FIN_VEILLE, 9: None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approuver", CHEMINS)
+async def test_grille_ouverte_sans_date_de_debut_est_close(
+    db: AsyncSession, enercoop: SimpleNamespace, approuver: Approbation
+) -> None:
+    """Offre legacy sans valid_from : close comme les autres, le front la retient aussi (findOpenGridToClose)."""
+    enercoop.basicwatt[6].valid_from = None
+    await db.commit()
+    await approuver(db, await soumettre(db, [nouvelle_puissance(enercoop, 6)]))
+
+    assert (await fins(db, "BasicWatt"))[6] == FIN_VEILLE
