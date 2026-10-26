@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { TrendingUp, Sun, Calculator, Download, Lock, LayoutDashboard, Calendar, Zap, Users, AlertCircle, BookOpen, Settings as SettingsIcon, Key, Shield, FileText, Activity, Euro, Scale, UserCheck, Radio, Home, Database, SlidersHorizontal } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import { pdlApi } from '@/api/pdl'
 import { adminApi } from '@/api/admin'
 import { usePdlStore } from '@/stores/pdlStore'
@@ -9,6 +9,8 @@ import { useAppMode } from '@/hooks/useAppMode'
 import { useDataFetchStore } from '@/stores/dataFetchStore'
 import { useIsDemo } from '@/hooks/useIsDemo'
 import { useUnifiedDataFetch } from '@/hooks/useUnifiedDataFetch'
+import { useClientAutoRefresh } from '@/hooks/useClientAutoRefresh'
+import { getReadings } from '@/utils/enedisMeasure'
 import { usePermissions } from '@/hooks/usePermissions'
 import { LoadingStatusBadge } from './LoadingStatusBadge'
 import type { PDL } from '@/types/api'
@@ -78,6 +80,10 @@ export default function PageHeader({ actions }: PageHeaderProps = {}) {
   const isDemo = useIsDemo()
   const { isAdmin } = usePermissions()
   const { isServerMode } = useAppMode()
+  const queryClient = useQueryClient()
+  // Le cache persisté (IndexedDB) se restaure de façon asynchrone : tant que ce n'est pas fini,
+  // le cache paraît vide et le rafraîchissement automatique lancerait une récupération pour rien
+  const isRestoring = useIsRestoring()
 
   // Clear stale impersonation state for non-admin users
   useEffect(() => {
@@ -162,6 +168,45 @@ export default function PageHeader({ actions }: PageHeaderProps = {}) {
     setFetchDataFunction(wrappedFetch)
     return () => setFetchDataFunction(null)
   }, [selectedPdl, setFetchDataFunction, setIsLoading])
+
+  // Mode client : les données synchronisées par le backend n'arrivent dans le cache du navigateur
+  // que par fetchAllData. Récupération automatique au chargement, puis à chaque nouvelle synchro (MED-68)
+  const linkedProductionUsagePointId = selectedPDLDetails?.linked_production_pdl_id
+    ? pdls.find(p => p.id === selectedPDLDetails.linked_production_pdl_id)?.usage_point_id
+    : undefined
+
+  const hasCachedData = useCallback(() => {
+    if (!selectedPdl) return false
+    const keys = [
+      ['consumptionDaily', selectedPdl],
+      ['consumptionDetail', selectedPdl],
+      ['productionDaily', linkedProductionUsagePointId ?? selectedPdl],
+      ['productionDetail', linkedProductionUsagePointId ?? selectedPdl],
+    ]
+    return keys.some((queryKey) => {
+      const cached = queryClient.getQueryData(queryKey) as { data?: unknown } | undefined
+      return getReadings(cached?.data).length > 0
+    })
+  }, [queryClient, selectedPdl, linkedProductionUsagePointId])
+
+  const autoRefresh = useCallback(async () => {
+    // Indicateur de chargement seulement quand la page est vide ; relecture de fond invisible sinon
+    const showLoading = !hasCachedData()
+    if (showLoading) setIsLoading(true)
+    try {
+      await fetchAllData({ silent: true })
+    } finally {
+      if (showLoading) setIsLoading(false)
+    }
+  }, [hasCachedData, fetchAllData, setIsLoading])
+
+  useClientAutoRefresh({
+    usagePointId: selectedPdl || null,
+    linkedUsagePointId: linkedProductionUsagePointId ?? null,
+    enabled: !isServerMode && !isDemo && !isRestoring && !!selectedPDLDetails,
+    hasCachedData,
+    refresh: autoRefresh,
+  })
 
   // Get the set of production PDL IDs that are linked to consumption PDLs
   // These should be hidden from the selector (the consumption PDL will show instead)

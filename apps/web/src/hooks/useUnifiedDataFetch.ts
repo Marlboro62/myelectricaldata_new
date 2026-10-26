@@ -19,6 +19,14 @@ interface UseUnifiedDataFetchParams {
 }
 
 
+export interface FetchAllDataOptions {
+  /** Récupération de fond (rafraîchissement automatique du mode client, MED-68) : aucun toast */
+  silent?: boolean
+}
+
+const noop = () => undefined
+const silentToast = { success: noop, error: noop, warning: noop, info: noop, loading: () => '', dismiss: noop }
+
 export function useUnifiedDataFetch({
   selectedPDL,
   selectedPDLDetails,
@@ -29,9 +37,11 @@ export function useUnifiedDataFetch({
   const { updateConsumptionStatus, updateProductionStatus, resetLoadingStatus } = useDataFetchStore()
   const { broadcast } = useCacheBroadcast()
 
-  const fetchAllData = useCallback(async () => {
+  const fetchAllData = useCallback(async ({ silent = false }: FetchAllDataOptions = {}) => {
+    const notify = silent ? silentToast : toast
+
     if (!selectedPDL || !selectedPDLDetails) {
-      toast.error('Veuillez sélectionner un PDL')
+      notify.error('Veuillez sélectionner un PDL')
       return
     }
 
@@ -139,7 +149,7 @@ export function useUnifiedDataFetch({
           } catch (error: any) {
             logger.log('Error fetching consumption daily:', error)
             updateConsumptionStatus({ daily: 'error' })
-            toast.error(`Erreur données quotidiennes de consommation: ${error?.response?.data?.error?.message || error.message}`)
+            notify.error(`Erreur données quotidiennes de consommation: ${error?.response?.data?.error?.message || error.message}`)
           }
         })()
       )
@@ -219,19 +229,19 @@ export function useUnifiedDataFetch({
                 detailProgress: { current: 1, total: 1 }
               })
 
-              toast.success(`Consommation détaillée: ${periodText}, ${uniqueReadings.length} points`, { duration: 4000 })
+              notify.success(`Consommation détaillée: ${periodText}, ${uniqueReadings.length} points`, { duration: 4000 })
             } else if (batchData?.error) {
               updateConsumptionStatus({ detail: 'error' })
               if (batchData.error.code === 'PARTIAL_DATA') {
-                toast.warning(batchData.error.message, { duration: 4000 })
+                notify.warning(batchData.error.message, { duration: 4000 })
               } else {
-                toast.error(batchData.error.message || 'Erreur données détaillées de consommation')
+                notify.error(batchData.error.message || 'Erreur données détaillées de consommation')
               }
             }
           } catch (error: any) {
             logger.log('Error fetching consumption detail batch:', error)
             updateConsumptionStatus({ detail: 'error' })
-            toast.error(`Erreur données détaillées de consommation: ${error?.response?.data?.error?.message || error.message}`)
+            notify.error(`Erreur données détaillées de consommation: ${error?.response?.data?.error?.message || error.message}`)
           }
         })()
       )
@@ -289,7 +299,7 @@ export function useUnifiedDataFetch({
           } catch (error: any) {
             logger.log('Error fetching production daily:', error)
             updateProductionStatus({ daily: 'error' })
-            toast.error(`Erreur données quotidiennes de production: ${error?.response?.data?.error?.message || error.message}`)
+            notify.error(`Erreur données quotidiennes de production: ${error?.response?.data?.error?.message || error.message}`)
           }
         })()
       )
@@ -342,19 +352,19 @@ export function useUnifiedDataFetch({
                 detailProgress: { current: 1, total: 1 }
               })
 
-              toast.success(`Production détaillée: ${periodText}, ${uniqueReadings.length} points`, { duration: 4000 })
+              notify.success(`Production détaillée: ${periodText}, ${uniqueReadings.length} points`, { duration: 4000 })
             } else if (batchData?.error) {
               updateProductionStatus({ detail: 'error' })
               if (batchData.error.code === 'PARTIAL_DATA') {
-                toast.warning(batchData.error.message, { duration: 4000 })
+                notify.warning(batchData.error.message, { duration: 4000 })
               } else {
-                toast.error(batchData.error.message || 'Erreur données détaillées de production')
+                notify.error(batchData.error.message || 'Erreur données détaillées de production')
               }
             }
           } catch (error: any) {
             logger.log('Error fetching production detail batch:', error)
             updateProductionStatus({ detail: 'error' })
-            toast.error(`Erreur données détaillées de production: ${error?.response?.data?.error?.message || error.message}`)
+            notify.error(`Erreur données détaillées de production: ${error?.response?.data?.error?.message || error.message}`)
           }
         })()
       )
@@ -367,13 +377,13 @@ export function useUnifiedDataFetch({
     logger.log('Unified data fetch completed')
 
     // Show a toast to indicate cache persistence is happening
-    const persistToast = toast.loading('💾 Mise en cache des données...', { duration: 3000 })
+    const persistToast = notify.loading('💾 Mise en cache des données...', { duration: 3000 })
 
     // Wait a bit for React Query Persist to save to localStorage
     // This gives time for the persistence mechanism to complete
     setTimeout(() => {
-      toast.dismiss(persistToast)
-      toast.success('✅ Données mises en cache avec succès !', { duration: 3000 })
+      notify.dismiss(persistToast)
+      notify.success('✅ Données mises en cache avec succès !', { duration: 3000 })
 
       // Broadcast cache update to other tabs
       logger.log('[UnifiedFetch] Broadcasting CACHE_UPDATED to other tabs')

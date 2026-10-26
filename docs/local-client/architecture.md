@@ -516,6 +516,16 @@ class SyncScheduler:
 | PDL sync | N/A | `sync_service.sync_all()` (gateway) |
 | Exports | N/A | `_run_scheduled_exports()` |
 
+### Rafraîchissement automatique du navigateur (mode client)
+
+Le scheduler remplit la base locale, mais les pages n'affichent que le cache React Query du navigateur (IndexedDB), rempli par `fetchAllData` (bouton « Récupérer »). En mode client, le hook `useClientAutoRefresh` (monté dans `PageHeader`) relance cette récupération seul, sans toast :
+
+- **Quand** : au chargement, toutes les 30 min, et au retour de visibilité de l'onglet (les minuteries sont suspendues en arrière-plan, mobile surtout).
+- **Condition** : cache du PDL vide, ou signature de synchro différente de celle mémorisée. La signature se lit dans `GET /sync/status/{pdl}` : plage `oldest_data_date..newest_data_date` de chaque type de synchro, PDL de production lié compris. `last_sync_at` est écarté, il change à chaque passage du scheduler même sans donnée nouvelle.
+- **Mémorisation** : `sessionStorage` (clé `myelectricaldata-sync-signature:<pdl>`), par onglet, car chaque onglet a son cache en mémoire. Elle n'est écrite qu'après une récupération réussie ; un rechargement pendant la récupération la refait donc à l'ouverture suivante.
+- **Limites assumées** : une correction Enedis à l'intérieur de la plage déjà connue n'est reprise qu'à la prochaine avancée de `newest_data_date` ou au clic « Récupérer » ; en démo, comportement inchangé.
+- **Mode serveur** : aucune récupération automatique (elle consommerait les quotas Enedis de la passerelle à chaque ouverture).
+
 ---
 
 ## Variables d'environnement spécifiques
