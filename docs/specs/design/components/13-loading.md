@@ -661,7 +661,7 @@ if (isInitialLoadingFromCache) {
 2. Cache IndexedDB s'hydrate (~50-100ms)
 3. `isInitializing = false` → Vérification du cache
 4. Si cache trouvé → `LoadingOverlay` avec données en cours de chargement
-5. Si pas de cache → État vide avec message "Cliquez sur Récupérer"
+5. Si pas de cache → État vide avec message "Cliquez sur Récupérer" (mode serveur) ; en mode client et en démo, la récupération part seule et l'état vide ne reste que le temps du chargement (bandeau de l'en-tête visible)
 
 #### Pages utilisant ce pattern
 

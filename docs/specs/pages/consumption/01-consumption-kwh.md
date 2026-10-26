@@ -129,6 +129,7 @@ Page permettant aux utilisateurs de **visualiser et analyser leur consommation �
 #### 1.2 Récupération des données ✅
 
 - Bouton "Récupérer l'historique" pour charger les données
+- En mode client, la récupération se lance aussi seule (cache vide ou nouvelle synchro du backend, puis toutes les 30 min, cf. `local-client/architecture.md`) ; en mode serveur, elle reste manuelle
 - Si l'utilisateur est administrateur, ajouter un bouton pour vider le cache (navigateur + Redis)
 - Charger automatiquement les données depuis le cache lorsqu'elles sont disponibles
 - Afficher des indicateurs de progression pour trois types de données :
