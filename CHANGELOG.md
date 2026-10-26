@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.0...2.9.1) (2026-10-26)
+
+### Bug Fixes
+
+* **web:** MED-68 / corrections de revue du rafraichissement automatique ([2dac887](https://github.com/MyElectricalData/myelectricaldata_new/commit/2dac887c05512735a526f7bdd9cda3efee97f9b6))
+* **web:** MED-68 / recuperation automatique des donnees en mode client ([4e91fb2](https://github.com/MyElectricalData/myelectricaldata_new/commit/4e91fb22d25f4581f8c8509653512f14353f01d2))
+
 ## [2.9.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.1...2.9.0) (2026-10-16)
 
 ### Features
