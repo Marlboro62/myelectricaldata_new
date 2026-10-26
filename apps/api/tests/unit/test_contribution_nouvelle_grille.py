@@ -215,3 +215,26 @@ async def test_grille_ouverte_sans_date_de_debut_est_close(
     await approuver(db, await soumettre(db, [nouvelle_puissance(enercoop, 6)]))
 
     assert (await fins(db, "BasicWatt"))[6] == FIN_VEILLE
+
+
+@pytest.mark.asyncio
+async def test_lot_qui_echoue_sur_une_nouvelle_grille_ne_ferme_pas_l_ancienne(
+    db: AsyncSession, enercoop: SimpleNamespace
+) -> None:
+    """Une NEW_OFFER `power_variants` (pricing_data absent) échoue en lot : aucune clôture sans remplaçante."""
+    contribution = OfferContribution(
+        contributor_user_id=enercoop.contributeur.id, contribution_type="NEW_OFFER",
+        existing_provider_id=enercoop.fournisseur.id, offer_name="BasicWatt", offer_type="BASE",
+        power_variants=[{"power_kva": 6, "subscription_price": 26.0, "base_price": 0.28}],
+        price_sheet_url="https://example.org/grille.pdf", valid_from=datetime.fromisoformat(NOUVELLE).replace(tzinfo=UTC),
+    )
+    [cid] = await soumettre(db, [contribution])
+    admin = SimpleNamespace(id=None, email="admin@example.org")
+
+    reponse = await energy_offers.bulk_approve_contributions({"contribution_ids": [cid]}, current_user=admin, db=db)
+
+    assert reponse.success
+    assert reponse.data["processed"] == 0
+    assert all(fin is None for fin in (await fins(db, "BasicWatt")).values())
+    await db.refresh(contribution)
+    assert contribution.status == "pending"

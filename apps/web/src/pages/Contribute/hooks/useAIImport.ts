@@ -1,6 +1,7 @@
 // Hook pour l'import JSON IA : validation, matching, deduplication
 // Extrait de AllOffers.tsx lignes 825-1429
 
+import { useRef } from 'react'
 import { energyApi, type EnergyOffer } from '@/api/energy'
 import { toast } from '@/stores/notificationStore'
 import { getFieldKeysForOfferType, getCleanOfferName } from '../utils/offerPricing'
@@ -60,6 +61,9 @@ export function useAIImport(state: AllOffersState) {
     setFilterOfferType,
     openRecapModal,
   } = state
+
+  // Clôtures (id -> valid_to) posées par le dernier import : elles suivent ses nouvelles puissances
+  const autoClosuresRef = useRef<Record<string, string>>({})
 
   // Cherche les offres actives du fournisseur par type, avec fallback synonymes
   const findOffersByType = (
@@ -250,6 +254,17 @@ export function useAIImport(state: AllOffersState) {
 
       const details: Array<{ offer_type: string; offer_name: string; matched: number; added: number; unchanged?: number; deprecated?: boolean; warning?: string }> = []
       const updatedOffers = { ...editedOffers }
+      // Les nouvelles puissances de l'import précédent sont remplacées par celles-ci : leurs clôtures
+      // automatiques aussi, sinon l'ancienne grille se clôt sans remplaçante. Une date modifiée à la main
+      // depuis reste.
+      for (const [id, closeDate] of Object.entries(autoClosuresRef.current)) {
+        if (updatedOffers[id]?.valid_to !== closeDate) continue
+        const rest = { ...updatedOffers[id] }
+        delete rest.valid_to
+        if (Object.keys(rest).length > 0) updatedOffers[id] = rest
+        else delete updatedOffers[id]
+      }
+      const autoClosures: Record<string, string> = {}
       const addedPowers: Array<{ power: number; fields: Record<string, string>; offer_type: string; offer_name: string; valid_from?: string; valid_to?: string }> = []
       const newDeprecated: Array<{ offer_type: string; offer_name: string; offer_ids: string[]; warning: string }> = []
       const historicalGroups: Array<{ name: string; validFrom: string; validTo: string; offer_type: string; alreadyInDb?: boolean; powers: Array<{ power: number; fields: Record<string, string> }> }> = []
@@ -518,6 +533,7 @@ export function useAIImport(state: AllOffersState) {
           const closeDate = dayBefore(offer.valid_from)
           for (const o of gridToClose) {
             updatedOffers[o.id] = { ...(updatedOffers[o.id] || {}), valid_to: closeDate }
+            autoClosures[o.id] = closeDate
           }
         }
 
@@ -531,6 +547,7 @@ export function useAIImport(state: AllOffersState) {
       }
 
       // Appliquer les modifications
+      autoClosuresRef.current = autoClosures
       setEditedOffers(updatedOffers)
       setUnchangedOfferIds(unchangedIds)
       setNewPowersData(addedPowers)

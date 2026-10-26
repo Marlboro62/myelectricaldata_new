@@ -167,6 +167,20 @@ describe('import IA : nouvelle grille d\'une offre déjà en base (issue #145)',
     expect(b6[0].pricing_data).toMatchObject({ valid_to: '2026-07-31' })
   })
 
+  it('retire la clôture automatique d\'un import précédent quand son remplacement disparaît', async () => {
+    // revue Codex : le réimport repart de zéro côté nouvelles puissances, pas côté clôtures
+    const { result } = await importer(importJson('BasicWatt', '2026-08-01', [3, 6, 36]))
+    expect(result.current.state.editedOffers.b9).toEqual({ valid_to: '2026-07-31' })
+    act(() => result.current.ai.setAiJsonInput(importJson('BasicWatt', '2026-02-05', [6])))
+    await act(async () => { await result.current.ai.importAIJson() })
+    const { state } = result.current
+
+    expect(state.newPowersData).toEqual([])
+    expect(Object.values(state.editedOffers).some(e => e.valid_to)).toBe(false)
+    expect(state.editedOffers.b9).toBeUndefined()
+    expect(state.editedOffers.b6?.subscription_price).toBe('26')
+  })
+
   it('met à jour la grille existante quand la date est la même', async () => {
     const { result } = await importer(importJson('BasicWatt', '2026-02-05', [6]))
     const { state } = result.current

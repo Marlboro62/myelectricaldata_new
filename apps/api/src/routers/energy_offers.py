@@ -1391,9 +1391,6 @@ async def bulk_approve_contributions(
             if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
                 # Create new offer
                 valid_from_date = contribution.valid_from or datetime.now(UTC)
-                # Clore l'offre remplacée, comme l'approbation unitaire
-                await close_replaced_offers(contribution, db, provider_id)
-
                 # Extraire valid_to de pricing_data si présent (offres historiques)
                 valid_to_date = None
                 valid_to_raw = pricing.pop("valid_to", None) if pricing else None
@@ -1436,6 +1433,10 @@ async def bulk_approve_contributions(
                     offer_url=contribution.price_sheet_url,
                     price_updated_at=datetime.now(UTC),
                 )
+                # Clore l'offre remplacée, comme l'approbation unitaire. Après la construction de la
+                # nouvelle offre : une erreur ci-dessus (contribution illisible) est attrapée sans
+                # rollback, et une clôture déjà posée serait validée sans remplaçante.
+                await close_replaced_offers(contribution, db, provider_id)
                 db.add(offer)
                 if valid_to_date:
                     logger.info(f"[BULK APPROVE] Created historical offer: {contribution.offer_name} valid_to={valid_to_date}")
