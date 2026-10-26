@@ -162,11 +162,25 @@ PostgreSQL username
 Database URL - uses POSTGRES_PASSWORD env var for the password
 */}}
 {{- define "myelectricaldata.databaseUrl" -}}
+{{- if include "myelectricaldata.sqlite.enabled" . -}}
+sqlite+aiosqlite:////app/data/myelectricaldata.db
+{{- else -}}
 {{- $host := include "myelectricaldata.postgres.host" . -}}
 {{- $port := include "myelectricaldata.postgres.port" . -}}
 {{- $database := include "myelectricaldata.postgres.database" . -}}
 {{- $username := include "myelectricaldata.postgres.username" . -}}
 postgresql+asyncpg://{{ $username }}:$(POSTGRES_PASSWORD)@{{ $host }}:{{ $port }}/{{ $database }}
+{{- end }}
+{{- end }}
+
+{{/*
+SQLite mode: no postgres subchart and no external database (neither host nor existing secret).
+Data lives in a SQLite file on the backend PVC (/app/data). Renders "true" or "".
+*/}}
+{{- define "myelectricaldata.sqlite.enabled" -}}
+{{- if and (not .Values.postgres.enabled) (not .Values.externalDatabase.host) (not .Values.externalDatabase.existingSecret) -}}
+true
+{{- end -}}
 {{- end }}
 
 {{/*

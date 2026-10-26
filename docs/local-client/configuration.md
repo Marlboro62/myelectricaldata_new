@@ -2,7 +2,7 @@
 
 ## Variables d'environnement
 
-Le mode client utilise le fichier `.env.local-client` à la racine du projet.
+Le mode client lit le fichier `.env` à la racine du projet, que Docker Compose charge automatiquement (`cp .env.local-client.example .env`). L'environnement de développement (`make up`, `make dev`) utilise `.env.local-client`.
 
 ---
 
@@ -37,7 +37,7 @@ CLIENT_FRONTEND_PORT=8100
 # Port du backend API (défaut: 8181)
 CLIENT_BACKEND_PORT=8181
 
-# Port PostgreSQL interne (défaut: 5433)
+# Port PostgreSQL interne, docker-compose.yml seulement (défaut: 5433)
 CLIENT_POSTGRES_PORT=5433
 ```
 
@@ -49,6 +49,19 @@ TZ=Europe/Paris
 ```
 
 ### Base de données
+
+Le backend lit `DATABASE_URL`, que chaque fichier compose fixe :
+
+| Compose | `DATABASE_URL` |
+|---------|----------------|
+| `docker-compose.sqlite.yml` (recommandé) | `sqlite+aiosqlite:////app/data/myelectricaldata.db` (fichier dans le volume `myelectricaldata_data`) |
+| `docker-compose.yml` | `postgresql+asyncpg://…@postgres:5432/…`, construite depuis les variables ci-dessous |
+
+En SQLite, aucune variable de base n'est à renseigner. Le backend crée le fichier et son schéma au
+premier démarrage, et règle SQLite pour les écritures simultanées du scheduler et de l'interface
+(journal WAL, attente de 30 s sur un verrou).
+
+Variables propres à `docker-compose.yml` :
 
 ```bash
 # Credentials PostgreSQL local (défaut: client/client)
@@ -244,7 +257,7 @@ La plupart des paramètres d'export peuvent également être configurés depuis 
 2. Configurer chaque destination dans les onglets dédiés
 3. Tester la connexion avant d'activer
 
-Les configurations sauvegardées via l'interface sont stockées dans la table `export_configs` de PostgreSQL et **prennent le pas** sur les variables d'environnement.
+Les configurations sauvegardées via l'interface sont stockées dans la table `export_configs` de la base locale et **prennent le pas** sur les variables d'environnement.
 
 ---
 
@@ -252,7 +265,7 @@ Les configurations sauvegardées via l'interface sont stockées dans la table `e
 
 ```
 1. Interface web (export_configs)     ← Priorité haute
-2. Variables d'environnement (.env.local-client)
+2. Variables d'environnement (.env)
 3. Valeurs par défaut                 ← Priorité basse
 ```
 
@@ -310,10 +323,10 @@ asyncio.run(test())
 
 ## Rechargement de la configuration
 
-Après modification de `.env.local-client`, redémarrer le backend :
+Après modification de `.env`, recréer le backend (`restart` ne relit pas le fichier) :
 
 ```bash
-docker compose -f docker-compose.yml restart backend
+docker compose -f docker-compose.yml up -d backend
 ```
 
 Les modifications de configuration via l'interface web sont prises en compte immédiatement, sans redémarrage.

@@ -5,7 +5,7 @@
 Le **mode client** de MyElectricalData est une version allégée de l'application, conçue pour tourner localement chez l'utilisateur final. Contrairement au mode serveur (gateway complet), le mode client :
 
 - **Se connecte à l'API MyElectricalData** (www.v2.myelectricaldata.fr) au lieu d'Enedis directement
-- **Stocke les données indéfiniment** en base PostgreSQL locale
+- **Stocke les données indéfiniment** dans une base locale : un simple fichier SQLite (recommandé) ou PostgreSQL
 - **Ne nécessite pas de compte Enedis professionnel**
 - **Propose des exports vers Home Assistant, MQTT, VictoriaMetrics, Jeedom**
 
@@ -36,7 +36,7 @@ Le **mode client** de MyElectricalData est une version allégée de l'applicatio
 │                                                │                            │
 │  Cache : Valkey (24h)                          ▼                            │
 │  Admin : Oui                           ┌─────────────┐                      │
-│  Page accueil : Oui                    │ PostgreSQL  │                      │
+│  Page accueil : Oui                    │SQLite ou PG │                      │
 │                                        │  (indéfini) │                      │
 │                                        └──────┬──────┘                      │
 │                                               │                             │
@@ -62,13 +62,13 @@ Le **mode client** de MyElectricalData est une version allégée de l'applicatio
 | Page | Description | Source de données |
 |------|-------------|-------------------|
 | **Dashboard** | Vue d'ensemble des PDL | API v2.myelectricaldata.fr |
-| **Consommation (kWh)** | Données de consommation | API → PostgreSQL local |
-| **Consommation (Euro)** | Coûts calculés | PostgreSQL local |
-| **Production** | Données de production | API → PostgreSQL local |
-| **Bilan** | Synthèse conso/prod | PostgreSQL local |
+| **Consommation (kWh)** | Données de consommation | API → base locale |
+| **Consommation (Euro)** | Coûts calculés | Base locale |
+| **Production** | Données de production | API → base locale |
+| **Bilan** | Synthèse conso/prod | Base locale |
 | **Contribution** | Envoi de contributions | API v2.myelectricaldata.fr |
-| **Tempo** | Calendrier RTE Tempo | API → PostgreSQL local |
-| **EcoWatt** | Alertes RTE EcoWatt | API → PostgreSQL local |
+| **Tempo** | Calendrier RTE Tempo | API → base locale |
+| **EcoWatt** | Alertes RTE EcoWatt | API → base locale |
 | **Exporter** | Configuration exports | Local uniquement |
 
 ### Pages supprimées (vs mode serveur)
@@ -102,17 +102,17 @@ Le **mode client** de MyElectricalData est une version allégée de l'applicatio
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer les variables d'environnement
-cp .env.local-client.example .env.local-client
+cp .env.local-client.example .env
 
-# Éditer .env.local-client avec vos credentials API
-vim .env.local-client
+# Éditer .env avec vos credentials API
+vim .env
 
-# Démarrer le mode client
-docker compose up -d
+# Démarrer le mode client (base SQLite ; docker-compose.yml pour PostgreSQL)
+docker compose -f docker-compose.sqlite.yml up -d
 ```
 
 **Accès** : http://localhost:8100 (port différent du mode serveur)
@@ -123,15 +123,15 @@ docker compose up -d
 
 Les deux modes peuvent tourner en parallèle sur la même machine :
 
-| Mode | Frontend | Backend | PostgreSQL |
-|------|----------|---------|------------|
-| Serveur | :8000 | :8081 | :5432 (interne) |
-| Client | :8100 | :8181 | :5433 (interne) |
+| Mode | Frontend | Backend | Base de données |
+|------|----------|---------|-----------------|
+| Serveur | :8000 | :8081 | PostgreSQL :5432 (interne) |
+| Client | :8100 | :8181 | SQLite (fichier), ou PostgreSQL :5433 (interne) |
 
 ```bash
 # Démarrer les deux modes simultanément
 docker compose -f docker-compose.server.yml up -d    # Mode serveur
-docker compose up -d                                  # Mode client
+docker compose -f docker-compose.sqlite.yml up -d    # Mode client
 ```
 
 ---

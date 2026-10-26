@@ -8,6 +8,12 @@ Choisissez la méthode d'installation adaptée à votre environnement.
 |---------|-------------|-----------------|
 | [Docker Compose](./docker.md) | Installation simple et rapide | Usage domestique, Raspberry Pi |
 | [Helm Chart](./helm.md) | Déploiement Kubernetes | Infrastructure existante K8s |
+| [Proxmox LXC](https://github.com/Marlboro62/myelectricaldata-proxmox) | Script communautaire, non officiel : conteneur LXC sans Docker | Serveur Proxmox VE |
+
+:::tip Vous utilisez déjà l'ancien client (V1) ?
+Installez la V2 à côté, puis importez l'historique de la V1 pour ne rien perdre :
+[Migrer depuis la V1](../migration-v1.md).
+:::
 
 ## Prérequis communs
 
@@ -34,15 +40,15 @@ import TabItem from '@theme/TabItem';
 
 ```bash
 # Cloner le repository
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 
 # Configurer
-cp .env.local-client.example .env.local-client
-nano .env.local-client  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
+cp .env.local-client.example .env
+nano .env  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
 
-# Démarrer
-docker compose -f docker-compose.yml up -d
+# Démarrer (base SQLite ; docker-compose.yml pour PostgreSQL)
+docker compose -f docker-compose.sqlite.yml up -d
 
 # Accéder
 open http://localhost:8100
@@ -63,7 +69,7 @@ helm dependency build ./myelectricaldata-client
 helm install myelectricaldata ./myelectricaldata-client \
   --set secrets.med.clientId.value=cli_xxx \
   --set secrets.med.clientSecret.value=xxx \
-  --set postgres.auth.password=xxx
+  --set postgres.enabled=false  # base SQLite ; ou --set postgres.auth.password=xxx
 ```
 
 ➡️ [Guide complet Helm](./helm.md)
@@ -77,4 +83,4 @@ helm install myelectricaldata ./myelectricaldata-client \
 |---------|------|
 | Frontend | 8100 |
 | Backend API | 8181 |
-| PostgreSQL | 5433 (interne) |
+| PostgreSQL (`docker-compose.yml` seulement) | 5433 (interne) |

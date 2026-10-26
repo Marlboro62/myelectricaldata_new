@@ -1,0 +1,91 @@
+# MyElectricalData - Client Mode, installation simple (SQLite)
+#
+# Le client local sans serveur de base de données : backend et frontend, les données dans un
+# fichier SQLite du volume myelectricaldata_data. Recommandé pour une nouvelle installation.
+# Le frontend transmet /api au backend : une seule URL à ouvrir.
+#
+# Usage:
+#   cp .env.local-client.example .env   # puis renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
+#   docker compose -f docker-compose.sqlite.yml up -d
+#
+# Docker Compose lit le fichier .env du dossier courant.
+# Installation PostgreSQL (existante, ou base externe) : docker-compose.yml. Passer de l'un à
+# l'autre ne déplace pas les données.
+# VictoriaMetrics (optionnel) : VICTORIAMETRICS_URL.
+#
+# Ports:
+#   - Frontend: http://localhost:8100
+#   - Backend API: http://localhost:8181
+
+services:
+  # Backend FastAPI - Client Mode
+  backend:
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/backend:latest
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_BACKEND_PORT:-8181}:8000"
+    environment:
+      # === System ===
+      - PYTHONUNBUFFERED=1
+      - TZ=${TZ:-Europe/Paris}
+
+      # === MyElectricalData API (REQUIRED) ===
+      # Get credentials from https://www.v2.myelectricaldata.fr > Settings > API
+      - MED_CLIENT_ID=${MED_CLIENT_ID}
+      - MED_CLIENT_SECRET=${MED_CLIENT_SECRET}
+      - MED_API_URL=${MED_API_URL:-https://www.v2.myelectricaldata.fr/api}
+
+      # === Database ===
+      # Fichier SQLite du volume /app/data (créé et migré au premier démarrage)
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/myelectricaldata.db
+
+      # === VictoriaMetrics (optional) ===
+      - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-}
+
+      # === Security ===
+      # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # Empty: random key at each start (sessions lost on restart)
+      - SECRET_KEY=${SECRET_KEY:-}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-43200}
+      # Hosts accepted in the Host header, comma separated (empty: every host)
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
+
+      # === Application ===
+      - DEBUG=${DEBUG:-false}
+      - API_HOST=${API_HOST:-0.0.0.0}
+      - API_PORT=${API_PORT:-8000}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - myelectricaldata_data:/app/data
+
+  # Frontend React - Client Mode
+  frontend:
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/frontend:latest
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_FRONTEND_PORT:-8100}:80"
+    environment:
+      - VITE_API_BASE_URL=/api
+      - VITE_BACKEND_URL=http://backend:8000
+      # nginx du frontend : /api transmis au backend
+      - API_PROXY_URL=http://backend:8000
+      # Default values of the export forms (prefill a new configuration only)
+      - VITE_DEFAULT_MQTT_BROKER=${VITE_DEFAULT_MQTT_BROKER:-}
+      - VITE_DEFAULT_MQTT_PORT=${VITE_DEFAULT_MQTT_PORT:-1883}
+      - VITE_DEFAULT_TOPIC_PREFIX=${VITE_DEFAULT_TOPIC_PREFIX:-myelectricaldata}
+      - VITE_DEFAULT_ENTITY_PREFIX=${VITE_DEFAULT_ENTITY_PREFIX:-myelectricaldata}
+      - VITE_DEFAULT_DISCOVERY_PREFIX=${VITE_DEFAULT_DISCOVERY_PREFIX:-homeassistant}
+      - VITE_DEFAULT_HA_URL=${VITE_DEFAULT_HA_URL:-}
+      - VITE_DEFAULT_VM_URL=${VITE_DEFAULT_VM_URL:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  myelectricaldata_data:

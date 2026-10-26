@@ -1,24 +1,41 @@
 # MyElectricalData - Client Mode (Production)
 #
-# Déploiement production du mode client.
-# Démarre uniquement le backend et frontend.
-# Les services externes (PostgreSQL, VictoriaMetrics) doivent être fournis.
+# Déploiement production du mode client : PostgreSQL, backend et frontend.
+# Le frontend transmet /api au backend : une seule URL à ouvrir.
 #
 # Usage:
+#   cp .env.local-client.example .env   # puis renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
 #   docker compose up -d
 #
-# Prérequis:
-#   - PostgreSQL accessible
-#   - VictoriaMetrics accessible (optionnel)
+# Docker Compose lit le fichier .env du dossier courant.
+# PostgreSQL externe : renseigner DATABASE_URL (le service postgres reste alors inutilisé).
+# VictoriaMetrics (optionnel) : VICTORIAMETRICS_URL.
 #
 # Ports:
 #   - Frontend: http://localhost:8100
 #   - Backend API: http://localhost:8181
 
 services:
+  # PostgreSQL - Client Mode
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=myelectricaldata_client
+      - POSTGRES_USER=myelectricaldata
+      # Lettres, chiffres, - _ . ~ seulement : il est repris tel quel dans DATABASE_URL
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-myelectricaldata}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myelectricaldata -d myelectricaldata_client"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Backend FastAPI - Client Mode
   backend:
-    image: ghcr.io/myelectricaldata/myelectricaldata/backend:latest
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/backend:latest
     restart: unless-stopped
     ports:
       - "${CLIENT_BACKEND_PORT:-8181}:8000"
@@ -34,14 +51,15 @@ services:
       - MED_API_URL=${MED_API_URL:-https://www.v2.myelectricaldata.fr/api}
 
       # === Database (REQUIRED) ===
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://myelectricaldata:password@postgres:5432/myelectricaldata_client}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://myelectricaldata:${POSTGRES_PASSWORD:-myelectricaldata}@postgres:5432/myelectricaldata_client}
 
       # === VictoriaMetrics (optional) ===
       - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-}
 
       # === Security ===
       # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      # Empty: random key at each start (sessions lost on restart)
+      - SECRET_KEY=${SECRET_KEY:-}
       - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-43200}
       # Hosts accepted in the Host header, comma separated (empty: every host)
@@ -57,16 +75,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # Frontend React - Client Mode
   frontend:
-    image: ghcr.io/myelectricaldata/myelectricaldata/frontend:latest
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/frontend:latest
     restart: unless-stopped
     ports:
       - "${CLIENT_FRONTEND_PORT:-8100}:80"
     environment:
       - VITE_API_BASE_URL=/api
       - VITE_BACKEND_URL=http://backend:8000
+      # nginx du frontend : /api transmis au backend
+      - API_PROXY_URL=http://backend:8000
       # Default values of the export forms (prefill a new configuration only)
       - VITE_DEFAULT_MQTT_BROKER=${VITE_DEFAULT_MQTT_BROKER:-}
       - VITE_DEFAULT_MQTT_PORT=${VITE_DEFAULT_MQTT_PORT:-1883}
@@ -78,3 +101,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  postgres_data:

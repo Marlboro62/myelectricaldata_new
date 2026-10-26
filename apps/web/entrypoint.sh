@@ -26,6 +26,45 @@ EOF
 # Make env.js readable by nginx
 chmod 644 /usr/share/nginx/html/env.js
 
+# Proxy /api vers le backend, seulement si API_PROXY_URL est définie (Docker Compose).
+# Sous Helm, l'ingress route déjà /api : la variable reste vide et rien n'est ajouté.
+# /api est transmis tel quel, comme par l'ingress (le backend a root_path="/api").
+API_PROXY_CONF_DIR=/etc/nginx/api-proxy
+mkdir -p "$API_PROXY_CONF_DIR"
+rm -f "$API_PROXY_CONF_DIR/api.conf"
+if [ -n "${API_PROXY_URL:-}" ]; then
+  # Schéma, hôte et port seulement : la valeur est écrite telle quelle dans la conf nginx
+  if ! printf '%s' "$API_PROXY_URL" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]{1,5})?/?$'; then
+    echo "API_PROXY_URL invalide : '$API_PROXY_URL' (attendu : http://hote:port, ex. http://backend:8000)" >&2
+    exit 1
+  fi
+  # Résolution du nom à chaque expiration (DNS du conteneur, 127.0.0.11 sous Docker) :
+  # un backend recréé change d'IP, une adresse figée au démarrage donnerait des 502
+  NAMESERVER=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
+  case "$NAMESERVER" in
+    *:*) NAMESERVER="[$NAMESERVER]" ;;
+  esac
+  cat <<EOF > "$API_PROXY_CONF_DIR/api.conf"
+location /api/ {
+    resolver ${NAMESERVER:-127.0.0.11} valid=10s ipv6=off;
+    # Variable sans URI : nginx résout le nom à la volée et transmet l'URI d'origine (/api compris)
+    set \$api_upstream ${API_PROXY_URL%/};
+    proxy_pass \$api_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$http_host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Connection "";
+    # Export en SSE : pas de mise en tampon, flux longs
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    client_max_body_size 10m;
+}
+EOF
+  echo "Proxy /api -> ${API_PROXY_URL%/}"
+fi
+
 echo "Generated /usr/share/nginx/html/env.js with:"
 cat /usr/share/nginx/html/env.js
 

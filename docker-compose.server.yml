@@ -1,7 +1,7 @@
 # MyElectricalData - Server Mode (Production)
 #
 # Déploiement production du mode serveur (gateway multi-utilisateurs).
-# Démarre uniquement le backend et frontend.
+# Démarre uniquement le backend et frontend (le frontend transmet /api au backend).
 # Les services externes (PostgreSQL, Valkey) doivent être fournis.
 #
 # Usage:
@@ -18,7 +18,7 @@
 services:
   # Backend FastAPI - Server Mode
   backend:
-    image: ghcr.io/myelectricaldata/myelectricaldata/backend:latest
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/backend:latest
     restart: unless-stopped
     ports:
       - "${SERVER_BACKEND_PORT:-8081}:8000"
@@ -50,7 +50,7 @@ services:
 
       # === Security ===
       # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY:-}
       - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-43200}
 
@@ -87,7 +87,7 @@ services:
 
   # Frontend React - Server Mode
   frontend:
-    image: ghcr.io/myelectricaldata/myelectricaldata/frontend:latest
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/frontend:latest
     restart: unless-stopped
     ports:
       - "${SERVER_FRONTEND_PORT:-8000}:80"
@@ -95,6 +95,8 @@ services:
       - VITE_API_BASE_URL=/api
       - VITE_BACKEND_URL=http://backend:8000
       - VITE_SERVER_MODE=true
+      # nginx du frontend : /api transmis au backend
+      - API_PROXY_URL=http://backend:8000
     depends_on:
       backend:
         condition: service_healthy

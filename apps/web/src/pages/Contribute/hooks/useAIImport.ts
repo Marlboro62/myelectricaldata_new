@@ -2,14 +2,15 @@
 // Extrait de AllOffers.tsx lignes 825-1429
 
 import { useRef } from 'react'
-import { energyApi, type EnergyOffer } from '@/api/energy'
+import type { EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions } from '@/api/energyQueries'
 import { toast } from '@/stores/notificationStore'
 import { getFieldKeysForOfferType, getCleanOfferName } from '../utils/offerPricing'
 import { dayBefore, findLaterOpenGrid, findOpenGridToClose } from '../utils/gridReplacement'
+import type { AllOffersState } from './useAllOffersState'
 
 // Jour calendaire d'une date ('YYYY-MM-DD' ou ISO) en JJ/MM/AAAA, sans passer par le fuseau
 const frDay = (date: string) => date.slice(0, 10).split('-').reverse().join('/')
-import type { AllOffersState } from './useAllOffersState'
 
 // Types supportés par le simulateur et le backend
 const SUPPORTED_TYPES = ['BASE', 'BASE_WEEKEND', 'HC_HP', 'HC_NUIT_WEEKEND', 'HC_WEEKEND', 'TEMPO', 'EJP', 'SEASONAL']
@@ -217,18 +218,10 @@ export function useAIImport(state: AllOffersState) {
     try {
       // Rafraîchir les offres depuis le serveur avant comparaison
       // (évite les faux "Déjà en base" si des offres ont été supprimées ailleurs)
-      const freshOffers = await queryClient.fetchQuery({
-        queryKey: ['energy-offers', 'with-history'],
-        queryFn: async () => {
-          const response = await energyApi.getOffers(undefined, true)
-          if (response.success && Array.isArray(response.data)) {
-            return response.data as EnergyOffer[]
-          }
-          return []
-        },
+      const currentOffers = await queryClient.fetchQuery({
+        ...offersWithHistoryQueryOptions(),
         staleTime: 0,
       })
-      const currentOffers = Array.isArray(freshOffers) ? freshOffers : []
 
       // Nettoyer le JSON
       let cleaned = aiJsonInput.trim()

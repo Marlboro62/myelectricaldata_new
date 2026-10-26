@@ -210,7 +210,8 @@ export function useConsumptionEuroCalcs({
     })
 
     const uniqueReadings = Array.from(uniqueReadingsMap.values())
-    const mostRecentDate = new Date(Math.max(...uniqueReadings.map(r => r.date.getTime())))
+    // reduce et non Math.max(...) : six ans de courbe dépassent la limite d'arguments de Safari (MED-64)
+    const mostRecentDate = uniqueReadings.reduce((max, r) => r.date > max ? r.date : max, uniqueReadings[0].date)
 
     // Define 2 rolling 365-day periods
     const periods = []

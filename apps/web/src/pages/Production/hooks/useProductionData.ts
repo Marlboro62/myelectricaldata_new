@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { pdlApi } from '@/api/pdl'
 import { enedisApi } from '@/api/enedis'
+import { resolveHistoryStart } from '@/utils/localSyncStatus'
+import { splitYearlyChunks } from '@/utils/historyRange'
 import type { EnedisMeasure, MeasureReading, PDL } from '@/types/api'
 import { buildMeasure, getReadings, getUnit } from '@/utils/enedisMeasure'
 import type { DateRange } from '../types/production.types'
@@ -38,45 +40,25 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
     queryFn: async () => {
       if (!selectedPDL || !dateRange) return null
 
+      // Mode client : remonter jusqu'à la donnée locale la plus ancienne (import V1, MED-64)
+      const start = await resolveHistoryStart(selectedPDL, dateRange.start, 'production_daily')
+
       // Calculate the total date range in days
-      const startDate = new Date(dateRange.start + 'T00:00:00Z')
+      const startDate = new Date(start + 'T00:00:00Z')
       const endDate = new Date(dateRange.end + 'T00:00:00Z')
       const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
       // If the range is <= 365 days, make a single call
       if (totalDays <= 365) {
         return enedisApi.getProductionDaily(selectedPDL, {
-          start: dateRange.start,
+          start,
           end: dateRange.end,
           use_cache: true,
         })
       }
 
-      // Split into yearly chunks (max 365 days per call)
-      const yearlyChunks: { start: string; end: string }[] = []
-      let currentStart = new Date(startDate)
-
-      while (currentStart <= endDate) {
-        let currentEnd = new Date(currentStart)
-        currentEnd.setUTCFullYear(currentEnd.getUTCFullYear() + 1)
-        currentEnd.setUTCDate(currentEnd.getUTCDate() - 1)
-
-        if (currentEnd > endDate) {
-          currentEnd = new Date(endDate)
-        }
-
-        const chunkStart = currentStart.getUTCFullYear() + '-' +
-                          String(currentStart.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                          String(currentStart.getUTCDate()).padStart(2, '0')
-        const chunkEnd = currentEnd.getUTCFullYear() + '-' +
-                        String(currentEnd.getUTCMonth() + 1).padStart(2, '0') + '-' +
-                        String(currentEnd.getUTCDate()).padStart(2, '0')
-
-        yearlyChunks.push({ start: chunkStart, end: chunkEnd })
-
-        currentStart = new Date(currentEnd)
-        currentStart.setUTCDate(currentStart.getUTCDate() + 1)
-      }
+      // Morceaux de 365 jours, fin incluse, chacun repris au lendemain du précédent (MED-64)
+      const yearlyChunks = splitYearlyChunks(start, dateRange.end)
 
       // Fetch all chunks in parallel
       const chunkPromises = yearlyChunks.map(chunk =>
@@ -112,7 +94,7 @@ export function useProductionData(selectedPDL: string, dateRange: DateRange | nu
             grandeurMetier: 'PROD',
             unite: getUnit(firstData) ?? 'Wh',
             pas: firstData?.pas,
-            start: dateRange.start,
+            start,
             end: dateRange.end,
           }),
         }

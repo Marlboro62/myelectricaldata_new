@@ -30,6 +30,7 @@ from ..services.local_data import (
     format_detail_response,
     parse_max_power_points,
 )
+from ..services.sync import MAX_DAILY_DAYS, MAX_DETAILED_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,16 @@ def _chunk_in_backoff(key: str) -> bool:
 def _backoff_chunk(key: str, chunk_end: date) -> None:
     if chunk_end <= date.today() - timedelta(days=DETAIL_CHUNK_RECENT_DAYS):
         _detail_chunk_backoff[key] = datetime.now() + DETAIL_CHUNK_BACKOFF
+
+
+def _within_gateway_window(ranges: list[tuple[date, date]], max_days: int) -> list[tuple[date, date]]:
+    """Plages manquantes coupées à la fenêtre que la passerelle sert (fin exclue).
+
+    Enedis ne remonte que 36 mois de journalier et 24 mois de courbe de charge (DATE_TOO_OLD au-delà),
+    alors que la base locale garde tout (import V1, MED-64) : les trous plus anciens restent des trous.
+    """
+    window_start = date.today() - timedelta(days=max_days)
+    return [(max(start, window_start), end) for start, end in ranges if end > window_start]
 
 router = APIRouter(
     prefix="/enedis",
@@ -257,6 +268,7 @@ async def get_consumption_daily(
         local_data, missing_ranges = await local_service.get_consumption_daily(
             usage_point_id, start_date, end_date
         )
+        missing_ranges = _within_gateway_window(missing_ranges, MAX_DAILY_DAYS)
         all_readings.extend(local_data)
 
         # If no missing ranges, return local data only
@@ -357,6 +369,7 @@ async def get_consumption_detail(
         local_data, missing_ranges = await local_service.get_consumption_detail(
             usage_point_id, start_date, end_date
         )
+        missing_ranges = _within_gateway_window(missing_ranges, MAX_DETAILED_DAYS)
         all_readings.extend(local_data)
 
         # If no missing ranges, return local data only
@@ -426,6 +439,7 @@ async def _max_power_data(
     start_date, end_date = parse_date(start), parse_date(end)
     local_service = LocalDataService(db)
     points, missing_ranges = await local_service.get_max_power(usage_point_id, start_date, end_date)
+    missing_ranges = _within_gateway_window(missing_ranges, MAX_DAILY_DAYS)
 
     if missing_ranges:
         for range_start, range_end in missing_ranges:
@@ -529,6 +543,7 @@ async def get_production_daily(
         local_data, missing_ranges = await local_service.get_production_daily(
             usage_point_id, start_date, end_date
         )
+        missing_ranges = _within_gateway_window(missing_ranges, MAX_DAILY_DAYS)
         all_readings.extend(local_data)
 
         # If no missing ranges, return local data only
@@ -629,6 +644,7 @@ async def get_production_detail(
         local_data, missing_ranges = await local_service.get_production_detail(
             usage_point_id, start_date, end_date
         )
+        missing_ranges = _within_gateway_window(missing_ranges, MAX_DETAILED_DAYS)
         all_readings.extend(local_data)
 
         # If no missing ranges, return local data only
@@ -775,6 +791,7 @@ async def get_consumption_detail_batch(
             local_data, missing_ranges = await local_service.get_consumption_detail(
                 usage_point_id, start_date, end_date
             )
+            missing_ranges = _within_gateway_window(missing_ranges, MAX_DETAILED_DAYS)
             all_readings.extend(local_data)
 
             if not missing_ranges:
@@ -898,6 +915,7 @@ async def get_production_detail_batch(
             local_data, missing_ranges = await local_service.get_production_detail(
                 usage_point_id, start_date, end_date
             )
+            missing_ranges = _within_gateway_window(missing_ranges, MAX_DETAILED_DAYS)
             all_readings.extend(local_data)
 
             if not missing_ranges:

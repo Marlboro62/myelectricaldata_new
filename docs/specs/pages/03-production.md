@@ -101,6 +101,10 @@ GET /api/enedis/production/load-curve/{pdl}?start={date}&end={date}
 - Données détaillées : 730 jours (2 ans)
 - Données disponibles : J-1 uniquement
 
+**Mode client :** ces limites ne bornent que ce que la passerelle est interrogée pour combler. La page affiche tout
+l'historique déjà stocké en base locale (import V1 compris), avec une période glissante d'un an par année disponible
+(MED-64). Le mode serveur garde les fenêtres Enedis.
+
 ---
 
 ## Interface utilisateur

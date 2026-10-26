@@ -1,6 +1,6 @@
 """Local Data Service for Client Mode
 
-This service queries the local PostgreSQL database for cached energy data.
+This service queries the local database (PostgreSQL or SQLite) for cached energy data.
 It implements a "local-first" strategy:
 1. Check local database for requested data
 2. Identify missing date ranges ("holes")
@@ -17,11 +17,11 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select, and_, func
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..adapters.enedis_format import address_v5_to_2026, build_measure, contract_v5_to_2026, extract_points
 from ..services.enedis_contract import offpeak_hours_to_text, parse_address, parse_contract
+from ..services.upsert import conflict_target, dialect_insert
 from ..models.client_mode import (
     ConsumptionData,
     ProductionData,
@@ -397,9 +397,9 @@ class LocalDataService:
         """Upsert de la puissance max sur (usage_point_id, date)"""
         if not records:
             return
-        stmt = pg_insert(MaxPowerData).values(records)
+        stmt = dialect_insert(self.db, MaxPowerData).values(records)
         stmt = stmt.on_conflict_do_update(
-            constraint="uq_max_power_data",
+            **conflict_target(self.db, "uq_max_power_data", ("usage_point_id", "date")),
             set_={
                 "interval_start": stmt.excluded.interval_start,
                 "value": stmt.excluded.value,

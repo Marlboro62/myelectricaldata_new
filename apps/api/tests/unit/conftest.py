@@ -15,3 +15,11 @@ def enedis_fixture():
         return json.loads((FIXTURES_ENEDIS_2026 / f"{name}.json").read_text())
 
     return _load
+
+
+@pytest.fixture(autouse=True)
+def _reset_sync_quota_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le blocage de quota de la synchro est un état de module : ne pas le laisser fuir d'un test à l'autre."""
+    from src.services import sync
+
+    monkeypatch.setattr(sync, "_quota_blocked_until", None)

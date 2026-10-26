@@ -156,6 +156,13 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "Description"
 ```
 
+**Client mode on SQLite (MED-65):** the local client runs on SQLite (`docker-compose.sqlite.yml`, recommended for new installs, or the client chart with `postgres.enabled=false`) or PostgreSQL; the server (gateway) stays on PostgreSQL. Rules:
+
+- A fresh SQLite database is created from the models (`create_all`) then stamped at the Alembic head (`alembic/env.py`): the models must always describe the final schema.
+- Every new migration must also run on SQLite (`render_as_batch=True`): no PostgreSQL-only DDL without a dialect guard.
+- Upserts go through `services/upsert.py` (named constraint on PostgreSQL, columns plus the partial index `uq_<table>_daily` on SQLite); timezone-aware columns use `TZDateTime`.
+- Parity tests: `tests/integration/test_client_sqlite.py` (set `TEST_POSTGRES_URL` to also run the PostgreSQL side, on a throwaway database).
+
 ### Frontend (apps/web/)
 
 ```bash

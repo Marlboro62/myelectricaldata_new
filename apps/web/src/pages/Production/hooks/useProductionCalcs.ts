@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { ProductionAPIResponse, DetailAPIResponse } from '../types/production.types'
 import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
+import { rollingYearPeriods } from '@/utils/historyRange'
 
 interface UseProductionCalcsProps {
   productionData: ProductionAPIResponse | null
@@ -28,49 +29,24 @@ export function useProductionCalcs({
     const monthYearData: Record<string, Record<string, number>> = {}
     let totalProduction = 0
 
-    // Find the most recent date in the actual data
+    // Most recent and oldest dates in the actual data
     let mostRecentDate = new Date(0)
+    let oldestDate = new Date(8.64e15)
     readings.forEach((reading) => {
       const dateStr = reading.date?.split('T')[0] || reading.date
       if (dateStr) {
         const readingDate = new Date(dateStr)
-        if (readingDate > mostRecentDate) {
-          mostRecentDate = readingDate
-        }
+        if (readingDate > mostRecentDate) mostRecentDate = readingDate
+        if (readingDate < oldestDate) oldestDate = readingDate
       }
     })
 
-    // Define 365-day periods (sliding windows)
-    const period1End = mostRecentDate
-    const period1Start = new Date(mostRecentDate.getTime() - 365 * 24 * 60 * 60 * 1000)
-    const period2End = new Date(mostRecentDate.getTime() - 365 * 24 * 60 * 60 * 1000)
-    const period2Start = new Date(mostRecentDate.getTime() - 730 * 24 * 60 * 60 * 1000)
-    const period3End = new Date(mostRecentDate.getTime() - 730 * 24 * 60 * 60 * 1000)
-    const period3Start = new Date(mostRecentDate.getTime() - 1095 * 24 * 60 * 60 * 1000)
-
-    const periods = [
-      {
-        label: String(period1End.getFullYear()),
-        startDaysAgo: 0,
-        endDaysAgo: 365,
-        startDate: period1Start,
-        endDate: period1End
-      },
-      {
-        label: String(period2End.getFullYear()),
-        startDaysAgo: 365,
-        endDaysAgo: 730,
-        startDate: period2Start,
-        endDate: period2End
-      },
-      {
-        label: String(period3End.getFullYear()),
-        startDaysAgo: 730,
-        endDaysAgo: 1095,
-        startDate: period3Start,
-        endDate: period3End
-      }
-    ]
+    // Rolling one-year periods (sliding windows), as many as the history holds (MED-64)
+    const periods = rollingYearPeriods(mostRecentDate, oldestDate).map(({ start, end }) => ({
+      label: String(end.getFullYear()),
+      startDate: start,
+      endDate: end
+    }))
 
     const periodData: Record<string, { value: number, startDate: Date, endDate: Date }> = {}
     const periodMonthlyData: Record<string, Record<string, number>> = {}

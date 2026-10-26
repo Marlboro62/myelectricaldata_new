@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { Euro, BarChart3, Database, ArrowRight, AlertCircle, Tag } from 'lucide-react'
 import { toast } from '@/stores/notificationStore'
 import { usePdlStore } from '@/stores/pdlStore'
 import { useDataFetchStore } from '@/stores/dataFetchStore'
 import { pdlApi } from '@/api/pdl'
-import { energyApi } from '@/api/energy'
 import { LoadingOverlay } from '@/components/LoadingOverlay'
 import { LoadingPlaceholder } from '@/components/LoadingPlaceholder'
 import { AnimatedSection } from '@/components/AnimatedSection'
@@ -18,12 +17,12 @@ import type { APIResponse, EnedisMeasure, PDL } from '@/types/api'
 
 // Import hooks and components
 import { useConsumptionEuroCalcs } from './hooks/useConsumptionEuroCalcs'
+import { useEuroOffers } from './hooks/useEuroOffers'
 import { EuroCostCards } from './components/EuroCostCards'
 import { EuroYearlyChart } from './components/EuroYearlyChart'
 import { EuroMonthlyBreakdown } from './components/EuroMonthlyBreakdown'
 import { OfferPricingCard } from './components/OfferPricingCard'
 import { InfoBlock } from './components/InfoBlock'
-import type { SelectedOfferWithProvider } from './types/euro.types'
 
 export default function ConsumptionEuro() {
   const { selectedPdl: selectedPDL } = usePdlStore()
@@ -93,61 +92,17 @@ export default function ConsumptionEuro() {
     pageContext: 'consumption',
   })
 
-  // Fetch providers
-  const { data: providersResponse } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: energyApi.getProviders,
-    staleTime: 5 * 60 * 1000,
-  })
-
-  // Fetch all offers
-  const { data: offersResponse, isLoading: isLoadingOffers } = useQuery({
-    queryKey: ['energy-offers'],
-    queryFn: () => energyApi.getOffers(),
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const providers = useMemo(() => providersResponse?.data || [], [providersResponse?.data])
-  const allOffers = useMemo(() => offersResponse?.data || [], [offersResponse?.data])
-
-  // Get selected offer with provider name
-  const selectedOfferWithProvider = useMemo((): SelectedOfferWithProvider | null => {
-    if (!selectedPDLDetails?.selected_offer_id) return null
-
-    const offer = allOffers.find(o => o.id === selectedPDLDetails.selected_offer_id)
-    if (!offer) return null
-
-    const provider = providers.find(p => p.id === offer.provider_id)
-
-    return {
-      ...offer,
-      providerName: provider?.name || 'Fournisseur inconnu'
-    }
-  }, [selectedPDLDetails?.selected_offer_id, allOffers, providers])
-
-  // Get comparison offer (for display only, doesn't change PDL's main offer)
-  const comparisonOfferWithProvider = useMemo((): SelectedOfferWithProvider | null => {
-    if (!comparisonOfferId) return null
-
-    const offer = allOffers.find(o => o.id === comparisonOfferId)
-    if (!offer) return null
-
-    const provider = providers.find(p => p.id === offer.provider_id)
-
-    return {
-      ...offer,
-      providerName: provider?.name || 'Fournisseur inconnu'
-    }
-  }, [comparisonOfferId, allOffers, providers])
+  const {
+    providers,
+    isLoadingOffers,
+    selectedOfferWithProvider,
+    comparisonOfferWithProvider,
+    compatibleOffers,
+    isSelectedOfferClosed,
+  } = useEuroOffers({ selectedOfferId: selectedPDLDetails?.selected_offer_id, comparisonOfferId })
 
   // The offer used for calculations (comparison if selected, otherwise the PDL's main offer)
   const displayOffer = comparisonOfferWithProvider || selectedOfferWithProvider
-
-  // Filter compatible offers for comparison (same power_kva as selected offer)
-  const compatibleOffers = useMemo(() => {
-    if (!selectedOfferWithProvider?.power_kva) return allOffers
-    return allOffers.filter(o => o.power_kva === selectedOfferWithProvider.power_kva)
-  }, [allOffers, selectedOfferWithProvider?.power_kva])
 
   // Check for cached detail data
   useEffect(() => {
@@ -378,6 +333,7 @@ export default function ConsumptionEuro() {
               onComparisonChange={setComparisonOfferId}
               comparisonOfferId={comparisonOfferId}
               defaultExpanded={false}
+              isOfferClosed={!comparisonOfferWithProvider && isSelectedOfferClosed}
             />
           </div>
         </AnimatedSection>

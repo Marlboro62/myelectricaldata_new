@@ -21,7 +21,7 @@ globs:
 
 | Fichier                              | Usage                  | Services inclus                                         |
 | ------------------------------------ | ---------------------- | ------------------------------------------------------- |
-| `docker-compose.yml` (racine)        | **Production Client**  | Backend, Frontend uniquement (images GHCR)              |
+| `docker-compose.yml` (racine)        | **Production Client**  | PostgreSQL, Backend, Frontend (images GHCR, `.env`)     |
 | `docker-compose.server.yml` (racine) | **Production Serveur** | Backend, Frontend uniquement (images GHCR)              |
 | `dev/docker-compose.yml`             | Developpement Client   | Backend, Frontend, PostgreSQL, VictoriaMetrics, pgAdmin |
 | `dev/docker-compose.server.yml`      | Developpement Serveur  | Backend, Frontend, PostgreSQL, Valkey, pgAdmin, Docs    |
@@ -91,7 +91,7 @@ docker compose -f dev/docker-compose.server.yml logs -f
 
 **Redemarrage necessaire uniquement si** :
 
-- Modification `.env.api`, `.env.client` ou `.env`
+- Modification `.env.api`, `.env.local-client` ou `.env`
 - Ajout dependances (`pyproject.toml`, `package.json`)
 - Modification `dev/docker-compose*.yml` ou `Dockerfile`
 

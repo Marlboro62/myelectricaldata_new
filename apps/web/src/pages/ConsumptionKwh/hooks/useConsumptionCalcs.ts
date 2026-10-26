@@ -4,6 +4,7 @@ import { parseOffpeakHours, isOffpeakTime } from '@/utils/offpeakHours'
 import { useDatePreferencesStore } from '@/stores/datePreferencesStore'
 import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
 import type { MeasureReading } from '@/types/api'
+import { rollingYearPeriods } from '@/utils/historyRange'
 import type { ConsumptionAPIResponse, MaxPowerAPIResponse, DetailAPIResponse } from '../types/consumption.types'
 
 interface UseConsumptionCalcsProps {
@@ -47,49 +48,24 @@ export function useConsumptionCalcs({
     const monthYearData: Record<string, Record<string, number>> = {}
     let totalConsumption = 0
 
-    // Find the most recent date in the actual data
+    // Most recent and oldest dates in the actual data
     let mostRecentDate = new Date(0)
+    let oldestDate = new Date(8.64e15)
     readings.forEach((reading: any) => {
       const dateStr = reading.date?.split('T')[0] || reading.date
       if (dateStr) {
         const readingDate = new Date(dateStr)
-        if (readingDate > mostRecentDate) {
-          mostRecentDate = readingDate
-        }
+        if (readingDate > mostRecentDate) mostRecentDate = readingDate
+        if (readingDate < oldestDate) oldestDate = readingDate
       }
     })
 
-    // Define 365-day periods (sliding windows)
-    const period1End = mostRecentDate
-    const period1Start = new Date(mostRecentDate.getTime() - 365 * 24 * 60 * 60 * 1000)
-    const period2End = new Date(mostRecentDate.getTime() - 365 * 24 * 60 * 60 * 1000)
-    const period2Start = new Date(mostRecentDate.getTime() - 730 * 24 * 60 * 60 * 1000)
-    const period3End = new Date(mostRecentDate.getTime() - 730 * 24 * 60 * 60 * 1000)
-    const period3Start = new Date(mostRecentDate.getTime() - 1095 * 24 * 60 * 60 * 1000)
-
-    const periods = [
-      {
-        label: String(period1End.getFullYear()),
-        startDaysAgo: 0,
-        endDaysAgo: 365,
-        startDate: period1Start,
-        endDate: period1End
-      },
-      {
-        label: String(period2End.getFullYear()),
-        startDaysAgo: 365,
-        endDaysAgo: 730,
-        startDate: period2Start,
-        endDate: period2End
-      },
-      {
-        label: String(period3End.getFullYear()),
-        startDaysAgo: 730,
-        endDaysAgo: 1095,
-        startDate: period3Start,
-        endDate: period3End
-      }
-    ]
+    // Rolling one-year periods (sliding windows), as many as the history holds (MED-64)
+    const periods = rollingYearPeriods(mostRecentDate, oldestDate).map(({ start, end }) => ({
+      label: String(end.getFullYear()),
+      startDate: start,
+      endDate: end
+    }))
 
     // Aggregate by 365-day periods
     const periodData: Record<string, { value: number, startDate: Date, endDate: Date }> = {}
@@ -194,7 +170,7 @@ export function useConsumptionCalcs({
       }).filter(Boolean)
     )].sort().reverse() as string[]
 
-    const yearsByPeriod = calendarYears.slice(0, 4).map(year => {
+    const yearsByPeriod = calendarYears.map(year => {
       const yearStart = new Date(`${year}-01-01`)
       const yearEnd = new Date(`${year}-12-31`)
 
@@ -285,7 +261,8 @@ export function useConsumptionCalcs({
       }
 
       const result: PresetComparison[] = []
-      for (let i = 0; i < 3; i++) {
+      // Un bloc par période jusqu'à la donnée la plus ancienne, sans plafond (MED-64)
+      for (let i = 0; i === 0 || new Date(currentPeriodStart.getFullYear() - i + 1, refMonth - 1, refDay - 1, 12, 0, 0, 0) >= oldestDate; i++) {
         const pStart = new Date(currentPeriodStart.getFullYear() - i, refMonth - 1, refDay, 12, 0, 0, 0)
         const pEnd = new Date(pStart.getFullYear() + 1, refMonth - 1, refDay - 1, 12, 0, 0, 0)
         const effectiveEnd = pEnd > mostRecentDate ? mostRecentDate : pEnd
@@ -483,7 +460,7 @@ export function useConsumptionCalcs({
     })
 
     // Construire les périodes par année calendaire
-    return calendarYears.slice(0, 4).map(year => ({
+    return calendarYears.map(year => ({
       label: year,
       startDate: new Date(`${year}-01-01`),
       endDate: new Date(`${year}-12-31`),
@@ -635,19 +612,14 @@ export function useConsumptionCalcs({
     const uniqueReadings = Array.from(uniqueReadingsMap.values())
 
     const mostRecentDate = uniqueReadings.reduce((max, r) => r.date > max ? r.date : max, uniqueReadings[0].date)
+    const oldestDate = uniqueReadings.reduce((min, r) => r.date < min ? r.date : min, uniqueReadings[0].date)
 
-    // Define 3 rolling 365-day periods (aligned with byYear calculation)
-    const periods = []
-    for (let i = 0; i < 3; i++) {
-      const periodEnd = new Date(mostRecentDate.getTime() - i * 365 * 24 * 60 * 60 * 1000)
-      const periodStart = new Date(periodEnd.getTime() - 365 * 24 * 60 * 60 * 1000)
-
-      periods.push({
-        start: periodStart,
-        end: periodEnd,
-        label: `${periodStart.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' })} - ${periodEnd.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' })}`
-      })
-    }
+    // Rolling one-year periods over the whole cached curve (aligned with byYear calculation, MED-64)
+    const periods = rollingYearPeriods(mostRecentDate, oldestDate).map(({ start, end }) => ({
+      start,
+      end,
+      label: `${start.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' })}`
+    }))
 
     const result = periods.map(period => {
       const periodReadings = uniqueReadings.filter(r => r.date >= period.start && r.date <= period.end)
@@ -726,34 +698,14 @@ export function useConsumptionCalcs({
     const uniqueReadings = Array.from(uniqueReadingsMap.values())
 
     const mostRecentDate = uniqueReadings.reduce((max, r) => r.date > max ? r.date : max, uniqueReadings[0].date)
+    const oldestDate = uniqueReadings.reduce((min, r) => r.date < min ? r.date : min, uniqueReadings[0].date)
 
-    // Define 2 rolling 365-day periods (max 730 days from API)
-    // Period 1: Most recent 365 days (from yesterday back 365 days)
-    // Period 2: Previous 365 days (from 365 days ago back to 730 days ago)
-    const periods = []
-
-    // Period 1: Last 365 days (e.g., Nov 11, 2024 to Nov 10, 2025)
-    const period1End = new Date(mostRecentDate)
-    const period1Start = new Date(mostRecentDate)
-    period1Start.setDate(period1Start.getDate() - 364) // 365 days total including end date
-
-    periods.push({
-      start: period1Start,
-      end: period1End,
-      label: period1End.getFullYear().toString() // 2025
-    })
-
-    // Period 2: Previous 365 days (e.g., Nov 11, 2023 to Nov 10, 2024)
-    const period2End = new Date(period1Start)
-    period2End.setDate(period2End.getDate() - 1) // Day before period 1 starts
-    const period2Start = new Date(period2End)
-    period2Start.setDate(period2Start.getDate() - 364) // 365 days total
-
-    periods.push({
-      start: period2Start,
-      end: period2End,
-      label: period2End.getFullYear().toString() // 2024
-    })
+    // Rolling one-year periods over the whole cached curve, labelled by end year (MED-64)
+    const periods = rollingYearPeriods(mostRecentDate, oldestDate).map(({ start, end }) => ({
+      start,
+      end,
+      label: end.getFullYear().toString()
+    }))
 
     const result = periods.map(period => {
       const periodReadings = uniqueReadings.filter(r => r.date >= period.start && r.date <= period.end)

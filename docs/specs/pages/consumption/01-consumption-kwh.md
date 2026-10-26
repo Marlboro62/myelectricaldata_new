@@ -135,6 +135,9 @@ Page permettant aux utilisateurs de **visualiser et analyser leur consommation �
   - Données quotidiennes (3 ans par pas d'un an maximum)
   - Puissance maximale (3 ans par pas d'un an maximum)
   - Données détaillées (2 ans par pas d'une semaine maximum)
+  - Mode client : la plage demandée remonte jusqu'à la donnée locale la plus ancienne du PDL (`oldest_data_date` de
+    `GET /sync/status/{pdl}`), au-delà de ces fenêtres, par morceaux de 365 jours ; la passerelle n'est sollicitée que
+    dans la fenêtre Enedis (MED-64)
 
 ### 2. Statistiques de consommation
 
@@ -198,7 +201,8 @@ Page permettant aux utilisateurs de **visualiser et analyser leur consommation �
   - Les données sont récupérées depuis l'API Enedis Data Connect
   - L'endpoint utilisé est `consumption/daily` (relevés quotidiens)
   - Les données sont mises en cache pour optimiser les performances
-  - Récupération automatique de 1095 jours d'historique (limite maximale Enedis)
+  - Récupération automatique de 1095 jours d'historique (limite maximale Enedis) ; en mode client, tout l'historique
+    déjà en base locale est affiché en plus
   - Les données Enedis ne sont disponibles qu'en J-1 (hier)
 
 ---

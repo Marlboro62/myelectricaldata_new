@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Loader2, CheckCircle2, XCircle, Circle } from 'lucide-react'
 import { useDataFetchStore } from '@/stores/dataFetchStore'
-import type { DataStatus } from '@/stores/dataFetchStore'
+import type { DataRange, DataStatus } from '@/stores/dataFetchStore'
+import { formatHistoryDepth } from '@/utils/historyRange'
 
 interface TaskStatus {
   name: string
@@ -52,12 +53,15 @@ export function LoadingStatusBadge() {
     0, 0, 0, 0
   ))
 
-  const formatDate = (date: Date) => {
-    return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`
-  }
+  const isoDate = (date: Date) => date.toISOString().split('T')[0]
+  const frDate = (iso: string) => iso.split('-').reverse().join('/')
 
-  const dailyDateRange = `${formatDate(threeYearsAgo)} → ${formatDate(yesterday)}`
-  const detailDateRange = `${formatDate(twoYearsAgo)} → ${formatDate(yesterday)}`
+  // Plage réellement demandée par le fetch (historique local compris, MED-64), sinon la fenêtre Enedis
+  const describeRange = (range: DataRange | undefined, windowStart: Date) => {
+    const start = range?.start ?? isoDate(windowStart)
+    const end = range?.end ?? isoDate(yesterday)
+    return `${frDate(start)} → ${frDate(end)} (${formatHistoryDepth(start, end)})`
+  }
 
   // Build tasks array based on loading status
   const tasks: TaskStatus[] = []
@@ -68,7 +72,7 @@ export function LoadingStatusBadge() {
       name: 'Conso quotidien',
       fullName: 'Consommation quotidienne',
       status: loadingStatus.consumption.daily,
-      description: `${dailyDateRange} (3 ans)`,
+      description: describeRange(loadingStatus.consumption.dailyRange, threeYearsAgo),
       category: 'consumption'
     })
   }
@@ -78,7 +82,7 @@ export function LoadingStatusBadge() {
       name: 'Conso détaillé',
       fullName: 'Consommation détaillée',
       status: loadingStatus.consumption.detail,
-      description: `${detailDateRange} (2 ans)`,
+      description: describeRange(loadingStatus.consumption.detailRange, twoYearsAgo),
       category: 'consumption'
     })
   }
@@ -88,7 +92,7 @@ export function LoadingStatusBadge() {
       name: 'Puissance max',
       fullName: 'Puissance maximum',
       status: loadingStatus.consumption.powerMax,
-      description: `${dailyDateRange} (3 ans)`,
+      description: describeRange(loadingStatus.consumption.powerMaxRange, threeYearsAgo),
       category: 'consumption'
     })
   }
@@ -99,7 +103,7 @@ export function LoadingStatusBadge() {
       name: 'Prod quotidien',
       fullName: 'Production quotidienne',
       status: loadingStatus.production.daily,
-      description: `${dailyDateRange} (3 ans)`,
+      description: describeRange(loadingStatus.production.dailyRange, threeYearsAgo),
       category: 'production'
     })
   }
@@ -109,7 +113,7 @@ export function LoadingStatusBadge() {
       name: 'Prod détaillé',
       fullName: 'Production détaillée',
       status: loadingStatus.production.detail,
-      description: `${detailDateRange} (2 ans)`,
+      description: describeRange(loadingStatus.production.detailRange, twoYearsAgo),
       category: 'production'
     })
   }

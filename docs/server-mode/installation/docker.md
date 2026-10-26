@@ -25,8 +25,8 @@ docker compose version
 ### Étape 1 : Cloner le dépôt
 
 ```bash
-git clone https://github.com/MyElectricalData/myelectricaldata.git
-cd myelectricaldata
+git clone https://github.com/MyElectricalData/myelectricaldata_new.git
+cd myelectricaldata_new
 ```
 
 ### Étape 2 : Configurer l'environnement
@@ -65,18 +65,22 @@ ADMIN_EMAILS=admin@example.com
 
 ### Étape 3 : Démarrer les services
 
+:::caution PostgreSQL et Valkey
+`docker-compose.server.yml` ne démarre que le backend et le frontend : PostgreSQL et Valkey doivent être fournis à part, et `DATABASE_URL` / `REDIS_URL` pointer vers eux. Le frontend transmet les appels `/api` au backend (`API_PROXY_URL`).
+:::
+
 ```bash
 # Démarrer en arrière-plan
-docker compose up -d
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 
 # Vérifier le statut
-docker compose ps
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker ps
 ```
 
 ### Étape 4 : Appliquer les migrations
 
 ```bash
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic upgrade head
 ```
 
 ### Étape 5 : Accéder à l'application
@@ -116,54 +120,51 @@ docker compose exec backend alembic upgrade head
 
 ```bash
 # Démarrer
-docker compose up -d
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 
 # Arrêter
-docker compose down
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker down
 
 # Redémarrer
-docker compose restart
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker restart
 
 # Voir les logs
-docker compose logs -f
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker logs -f
 
 # Logs d'un service spécifique
-docker compose logs -f backend
-docker compose logs -f frontend
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker logs -f backend
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker logs -f frontend
 ```
 
 ### Base de données
 
 ```bash
-# Accès shell PostgreSQL
-docker compose exec postgres psql -U myelectricaldata
+# Accès shell PostgreSQL (serveur externe, hôte de DATABASE_URL)
+psql -h <hote-postgres> -U myelectricaldata myelectricaldata
 
 # Appliquer les migrations
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic upgrade head
 
 # Rollback dernière migration
-docker compose exec backend alembic downgrade -1
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic downgrade -1
 
 # Créer une nouvelle migration
-docker compose exec backend alembic revision --autogenerate -m "Description"
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic revision --autogenerate -m "Description"
 
-# Backup
-docker compose exec postgres pg_dump -U myelectricaldata > backup.sql
+# Backup (serveur PostgreSQL externe)
+pg_dump -h <hote-postgres> -U myelectricaldata myelectricaldata > backup.sql
 
 # Restore
-docker compose exec -T postgres psql -U myelectricaldata < backup.sql
+psql -h <hote-postgres> -U myelectricaldata myelectricaldata < backup.sql
 ```
 
 ### Maintenance
 
 ```bash
-# Reconstruire les images
-docker compose build --no-cache
-
 # Mettre à jour
 git pull
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker pull
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d
 
 # Nettoyer les ressources inutilisées
 docker system prune -f
@@ -273,7 +274,7 @@ myelectricaldata.example.com {
 
 ```bash
 # Vérifier les logs
-docker compose logs backend
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker logs backend
 
 # Problèmes courants :
 # - DATABASE_URL incorrect
@@ -285,37 +286,34 @@ docker compose logs backend
 ### Erreur de connexion à PostgreSQL
 
 ```bash
-# Vérifier que PostgreSQL est démarré
-docker compose ps postgres
+# PostgreSQL est externe : tester la connexion depuis l'hôte de DATABASE_URL
+pg_isready -h <hote-postgres> -p 5432
 
-# Tester la connexion
-docker compose exec postgres pg_isready
-
-# Vérifier les logs PostgreSQL
-docker compose logs postgres
+# Erreurs de connexion vues par le backend
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker logs backend
 ```
 
 ### Erreur de connexion à Valkey
 
 ```bash
 # Vérifier que Valkey est démarré
-docker compose ps valkey
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker ps valkey
 
 # Tester la connexion
-docker compose exec valkey redis-cli ping
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec valkey redis-cli ping
 ```
 
 ### Migrations échouent
 
 ```bash
 # Vérifier l'état actuel
-docker compose exec backend alembic current
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic current
 
 # Voir l'historique
-docker compose exec backend alembic history
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic history
 
 # Forcer le stamp (si base existante)
-docker compose exec backend alembic stamp head
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic stamp head
 ```
 
 ---
@@ -324,16 +322,16 @@ docker compose exec backend alembic stamp head
 
 ```bash
 # Arrêter les services
-docker compose down
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker down
 
 # Récupérer les mises à jour
 git pull
 
 # Reconstruire et démarrer
-docker compose up -d --build
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker up -d --build
 
 # Appliquer les migrations
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker exec backend alembic upgrade head
 ```
 
 ---
@@ -342,11 +340,11 @@ docker compose exec backend alembic upgrade head
 
 ```bash
 # Arrêter et supprimer les conteneurs
-docker compose down
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker down
 
 # Supprimer aussi les volumes (ATTENTION: perte de données)
-docker compose down -v
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker down -v
 
 # Supprimer les images
-docker compose down --rmi all
+docker compose -f docker-compose.server.yml --env-file apps/api/.env.docker down --rmi all
 ```

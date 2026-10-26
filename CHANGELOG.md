@@ -1,5 +1,106 @@
 # Changelog
 
+## [2.9.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.1...2.9.0) (2026-10-16)
+
+### Features
+
+* **web:** MED-67 / lien « changer d'offre » dans le badge d'offre close ([f3b5b64](https://github.com/MyElectricalData/myelectricaldata_new/commit/f3b5b647b84da3cb50ea0ba4d1a8cb1c953c4070))
+
+### Bug Fixes
+
+* **web:** MED-67 / Consommation € retrouve l'offre du PDL même close ([f2dc283](https://github.com/MyElectricalData/myelectricaldata_new/commit/f2dc28343ee2a11e9e57679266f9137b6573c71e))
+* **web:** MED-67 / une seule définition de la requête des fournisseurs ([e75db23](https://github.com/MyElectricalData/myelectricaldata_new/commit/e75db235308c7170e2d05083ad4964dd99020632))
+* **web:** MED-67 / une seule définition de la requête des offres avec historique ([c28544b](https://github.com/MyElectricalData/myelectricaldata_new/commit/c28544b479cbfd1172a8185cc63b46affad53849))
+
+## [2.8.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.8.0...2.8.1) (2026-10-16)
+
+### Bug Fixes
+
+* **api:** MED-64 / l import V1 elargit les bornes des statuts de synchro ([b16fd0a](https://github.com/MyElectricalData/myelectricaldata_new/commit/b16fd0a5a3fbf123b5d350569b35f63de3454d10))
+* **api:** MED-64 / ne combler via la passerelle que les trous de sa fenetre ([b041085](https://github.com/MyElectricalData/myelectricaldata_new/commit/b041085c9a954854232488b7f119dc28cbc47467))
+* **web:** MED-64 / afficher toutes les annees disponibles dans les agregats ([af18400](https://github.com/MyElectricalData/myelectricaldata_new/commit/af18400bfc78ad972098ef64b59a289058b977e0))
+* **web:** MED-64 / demander tout l historique local au lieu de 3 ans ([d4df0d2](https://github.com/MyElectricalData/myelectricaldata_new/commit/d4df0d2fc2e02fdf7f5e7137d65afccc7694f2af))
+* **web:** MED-64 / libelles de profondeur selon la plage chargee ([7a13b61](https://github.com/MyElectricalData/myelectricaldata_new/commit/7a13b615cd92cf42261bd7cf3ad6d8edecba3d4e))
+* **web:** MED-64 / morceaux journaliers a fin incluse, sans chevauchement ([154cd11](https://github.com/MyElectricalData/myelectricaldata_new/commit/154cd112b6ef8342892dc1d1aa990ff3a90b33f5))
+* **web:** MED-64 / morceaux journaliers contigus, calendrier de la courbe et periodes en UTC ([183cba4](https://github.com/MyElectricalData/myelectricaldata_new/commit/183cba42e65f6083337225d35481dd7682170761))
+
+## [2.8.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.1...2.8.0) (2026-10-16)
+
+### Features
+
+* **api:** MED-65 / client local sur SQLite ([65ca4bc](https://github.com/MyElectricalData/myelectricaldata_new/commit/65ca4bc9aeaaa4e0ada0fd82a96484e81e027e11))
+* **docker:** MED-65 / compose client sur SQLite, sans service PostgreSQL ([4594dc2](https://github.com/MyElectricalData/myelectricaldata_new/commit/4594dc2b050472aab5ea336ca537f134bd11b2f2))
+* **helm:** MED-65 / client sur SQLite quand aucune base PostgreSQL n'est configurée ([f4a548c](https://github.com/MyElectricalData/myelectricaldata_new/commit/f4a548cb17f1e72b51b3e056d196f8b18e99e3d9))
+* **helm:** MED-65 / refuser le mode SQLite sans persistance du backend ([460c920](https://github.com/MyElectricalData/myelectricaldata_new/commit/460c920b2773077b4df291a5404d030ece37b592))
+
+### Bug Fixes
+
+* **api:** MED-65 / amorcage SQLite rejouable apres un premier demarrage interrompu ([c1505fa](https://github.com/MyElectricalData/myelectricaldata_new/commit/c1505fa6d1c9cebbbc03e58435db435d162f3a72))
+* **helm:** MED-65 / garder le PVC du backend a la desinstallation en mode SQLite ([6863da0](https://github.com/MyElectricalData/myelectricaldata_new/commit/6863da0a923c2030c880d09b4564a66ed240c90b))
+
+## [2.7.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.7.0...2.7.1) (2026-10-15)
+
+### Bug Fixes
+
+* **web:** MED-63 / appliquer les correctifs Alpine sur l'image nginx (CVE-2026-85091) ([f1ca8b5](https://github.com/MyElectricalData/myelectricaldata_new/commit/f1ca8b590db46d128908a1fca1508fd3491210f2))
+
+## [2.7.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.1...2.7.0) (2026-10-15)
+
+### Features
+
+* **api:** MED-60 / import de l'historique du client local V1 ([9dae78c](https://github.com/MyElectricalData/myelectricaldata_new/commit/9dae78cd6d0fc8bcb435ee92428dce30219e7bee))
+
+### Bug Fixes
+
+* **api:** MED-60 / import V1 aligné sur les fenêtres de synchro V2 (revue) ([ba3b328](https://github.com/MyElectricalData/myelectricaldata_new/commit/ba3b3280bc833454c7fea00d3617f59200698ab6))
+* **api:** MED-60 / indiquer la synchro des PDL quand l'import V1 en ignore ([d1a2db4](https://github.com/MyElectricalData/myelectricaldata_new/commit/d1a2db47953a6ea37e48d6224adebbaa0bcf0c70))
+* **api:** MED-60 / refuser l'import V1 vers un PostgreSQL < 15 ([8b20c66](https://github.com/MyElectricalData/myelectricaldata_new/commit/8b20c6681a9d94872c58beca52695c47856ba0d0))
+
+## [2.6.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.6.0...2.6.1) (2026-10-15)
+
+### Bug Fixes
+
+* **sync:** gracefully handle gateway 404 on Zen Flex calendar ([b7949dc](https://github.com/MyElectricalData/myelectricaldata_new/commit/b7949dcf8bc3e40ae998dc92e65bbbf762e77041))
+* **sync:** MED-50 / quota passerelle en HTTP 200 et arret du PDL entier ([9dd665c](https://github.com/MyElectricalData/myelectricaldata_new/commit/9dd665cbf4989f56fe8cfb20570d12c0013036cf)), closes [#137](https://github.com/MyElectricalData/myelectricaldata_new/issues/137)
+* **sync:** MED-50 / suspendre la synchro du compte jusqu'a minuit UTC apres un quota ([c973fc0](https://github.com/MyElectricalData/myelectricaldata_new/commit/c973fc02b1ab3114d1fca7e8fb302fd65770323f))
+
+## [2.6.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.6...2.6.0) (2026-10-15)
+
+### Features
+
+* **api:** MED-43 / cache négatif des refus 400 par jour ([c5e0576](https://github.com/MyElectricalData/myelectricaldata_new/commit/c5e0576a41d539d301042845cd511e5d52f37945))
+* **web:** MED-52 / proxy /api optionnel du conteneur frontend (API_PROXY_URL) ([d3e6f3e](https://github.com/MyElectricalData/myelectricaldata_new/commit/d3e6f3e1c34fd933fc68d58fdfe12b9f67142152))
+
+### Bug Fixes
+
+* **api:** MED-43 / marques par jour réservées aux refus de période ([8b9945e](https://github.com/MyElectricalData/myelectricaldata_new/commit/8b9945e1eef0b4b9c1dbb618a036d0ef8e3332f8))
+* **docker:** MED-52 / compose client avec PostgreSQL et images publiques myelectricaldata_new ([f8876ac](https://github.com/MyElectricalData/myelectricaldata_new/commit/f8876acd87c8a9318e94d094a5305468ad46a63b)), closes [#108](https://github.com/MyElectricalData/myelectricaldata_new/issues/108)
+* **docker:** MED-52 / SECRET_KEY vide par défaut au lieu d'une clé publique connue ([ca498f6](https://github.com/MyElectricalData/myelectricaldata_new/commit/ca498f6e57f4674f1044c9ef9e1b65a82832846f))
+* MED-52 / corrections de la revue (DNS du proxy, mot de passe PostgreSQL, docs Helm et serveur) ([b4d78ad](https://github.com/MyElectricalData/myelectricaldata_new/commit/b4d78ad33533a8103abd3c4ab64060628915ea8d))
+
+## [2.5.6](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.5...2.5.6) (2026-10-15)
+
+### Bug Fixes
+
+* **api:** MED-43 / servir le jour récent partiel quand Enedis renvoie vide ([8ff0e7c](https://github.com/MyElectricalData/myelectricaldata_new/commit/8ff0e7c1b1232b06458a886a73205520413c4760))
+
+## [2.5.5](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.4...2.5.5) (2026-10-15)
+
+### Bug Fixes
+
+* **api:** resolve static dir and pyproject.toml relative to the package ([5b56f3c](https://github.com/MyElectricalData/myelectricaldata_new/commit/5b56f3c40d5e623d36b1b7005fa66e689812f679))
+* **web:** resolve SSE export URLs from runtime API base URL ([e5699ae](https://github.com/MyElectricalData/myelectricaldata_new/commit/e5699aed5fcd992d3ff2bffabe4cbfd0705d3460))
+
+## [2.5.4](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.3...2.5.4) (2026-10-15)
+
+### Bug Fixes
+
+* **sync:** prise en compte du HTTP 429 et résilience de l'adresse ([28ece03](https://github.com/MyElectricalData/myelectricaldata_new/commit/28ece03b1abfe430a03dc15d45b962ea05c1cd8a))
+* **web:** MED-24 / chaque relevé compte pour son propre pas (kWh, production, bilan) ([58c76d5](https://github.com/MyElectricalData/myelectricaldata_new/commit/58c76d58305b2109b855c273586951ea37bdad8f))
+* **web:** MED-24 / comparaisons ramenées sur les créneaux du jour affiché ([1239f01](https://github.com/MyElectricalData/myelectricaldata_new/commit/1239f014dbd976ee39b1a92d33ccecbe94ca9df5))
+* **web:** MED-24 / pas par relevé dans l'Euro, le Simulateur, les exports et les comparaisons ([22cc191](https://github.com/MyElectricalData/myelectricaldata_new/commit/22cc191fe7f57c0526a123199b1cbc51d1bee875))
+* **web:** MED-24 / suites de la revue (fuseau, pas nul, replis, libellé du pas) ([d76a691](https://github.com/MyElectricalData/myelectricaldata_new/commit/d76a691af5ef9e6914a9514caaa0ae0af62c0107))
+
 ## [2.5.3](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.5.2...2.5.3) (2026-10-14)
 
 ### Refactoring

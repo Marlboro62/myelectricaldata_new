@@ -3,7 +3,8 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { energyApi, type EnergyProvider, type EnergyOffer } from '@/api/energy'
+import type { EnergyOffer } from '@/api/energy'
+import { offersWithHistoryQueryOptions, providersQueryOptions } from '@/api/energyQueries'
 import { pdlApi } from '@/api/pdl'
 import { toast } from '@/stores/notificationStore'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -119,26 +120,12 @@ export function useAllOffersState() {
   // --- Queries ---
 
   const { data: providersData } = useQuery({
-    queryKey: ['energy-providers'],
-    queryFn: async () => {
-      const response = await energyApi.getProviders()
-      if (response.success && Array.isArray(response.data)) {
-        return response.data as EnergyProvider[]
-      }
-      return []
-    },
+    ...providersQueryOptions(),
     staleTime: 0,
   })
 
   const { data: offersData } = useQuery({
-    queryKey: ['energy-offers', 'with-history'],
-    queryFn: async () => {
-      const response = await energyApi.getOffers(undefined, true)
-      if (response.success && Array.isArray(response.data)) {
-        return response.data as EnergyOffer[]
-      }
-      return []
-    },
+    ...offersWithHistoryQueryOptions(),
     staleTime: 0,
   })
 

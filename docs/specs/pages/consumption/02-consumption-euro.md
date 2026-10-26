@@ -99,7 +99,8 @@ apps/web/src/pages/ConsumptionEuro/
 │   ├── OfferPricingCard.tsx           # Détail de l'offre + comparaison
 │   └── InfoBlock.tsx                  # Bloc informatif
 ├── hooks/
-│   └── useConsumptionEuroCalcs.ts     # Calculs des coûts (HC/HP, TEMPO, BASE)
+│   ├── useConsumptionEuroCalcs.ts     # Calculs des coûts (HC/HP, TEMPO, BASE)
+│   └── useEuroOffers.ts               # Offres, fournisseurs, offre du PDL (même close), comparateur
 └── types/
     └── euro.types.ts                  # Types TypeScript (YearlyCost, etc.)
 ```
@@ -119,13 +120,20 @@ apps/web/src/pages/ConsumptionEuro/
    - Données demi-horaires ou horaires
    - Séparation HC/HP via les plages horaires du PDL
 
-2. **Offres tarifaires** (depuis API)
-   - Clé : `['energy-offers']`
-   - Tous les prix par tranche tarifaire
+2. **Offres tarifaires** (depuis API, historique compris)
+   - Clé : `['energy-offers', 'with-history']`, définie une seule fois dans `apps/web/src/api/energyQueries.ts` (`offersWithHistoryQueryOptions`)
+   - Appel `energyApi.getOffers(undefined, true)` : sans `include_history`, l'API ne rend que les offres actives et non expirées, et un PDL dont l'offre est close (`valid_to` passé ou `is_active` faux) perdrait son calcul en euros (MED-67)
+   - Le cache contient toujours un `EnergyOffer[]`, partagé avec le Simulateur, `OfferSelector` et la contribution : toute lecture passe par `offersWithHistoryQueryOptions()`, jamais par un `queryFn` écrit à la main (une forme différente sous la même clé casserait l'autre page)
 
 3. **Fournisseurs** (depuis API)
-   - Clé : `['energy-providers']`
+   - Clé : `['energy-providers']`, même règle (`providersQueryOptions`)
    - Noms et logos des fournisseurs
+
+### Offre close du PDL
+
+- `isOfferExpired` (`apps/web/src/utils/offers.ts`) : close = désactivée ou `valid_to` passé, même règle que le filtre de l'API
+- `OfferPricingCard` affiche sous le nom de l'offre le badge « Offre close depuis le JJ/MM/AAAA · changer d'offre » (date en UTC, lien vers `/dashboard`), sauf si une offre de comparaison est choisie
+- Le comparateur ne liste que les offres en cours de même puissance, plus l'offre du PDL (« Actuelle ») même close
 
 4. **Configuration PDL**
    - `selected_offer_id` : ID de l'offre sélectionnée
@@ -201,7 +209,7 @@ Les prix des offres sont en TTC et incluent :
 | ----------------------- | -------- | -------------------------------------- |
 | `GET /pdls`             | Query    | Liste des PDLs avec offre sélectionnée |
 | `GET /energy-providers` | Query    | Liste des fournisseurs                 |
-| `GET /energy-offers`    | Query    | Liste des offres tarifaires            |
+| `GET /energy/offers?include_history=true` | Query | Liste des offres tarifaires, closes comprises |
 | `PUT /pdls/{id}/offer`  | Mutation | Mise à jour de l'offre sélectionnée    |
 
 ---

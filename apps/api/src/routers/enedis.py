@@ -203,6 +203,10 @@ def missing_ranges(missing_dates: list[str]) -> list[tuple[str, str]]:
 RECENT_DAYS = 2  # J-1 et J-2
 RECENT_TTL_SECONDS = 3 * 3600
 EMPTY_DAY = {"empty": True}  # marqueur de cache : jour ancien sans mesure chez Enedis
+REJECTED_DAY_TTL_SECONDS = 7 * 86400  # jour ancien refusé en 400 : redemandé une fois par semaine
+# Refus 400 qui disent qu'une période n'est pas disponible (et non que la demande est mal autorisée,
+# comme ADAM-ERR0061) : aucun service souscrit pour la période, date de début avant la limite d'historique
+PERIOD_REJECTION_CODES = {"ADAM-ERR0191", "ADAM-DC-0016"}
 EXPECTED_READINGS = {"PT10M": 144, "PT15M": 96, "PT30M": 48, "PT60M": 24}  # points par jour selon le pas de la courbe
 
 # Cache passerelle par défaut (MED-43) : un appelant qui n'envoie pas use_cache (conteneur local <= 2.1.x,
@@ -270,6 +274,20 @@ def enedis_rejected_range(error: BaseException, api_end: str, today: datetime) -
     return None
 
 
+def enedis_error_code(error: BaseException) -> str | None:
+    """Code Enedis (`error` du corps JSON) du refus HTTP levé tel quel ou en cause du ValueError de l'adaptateur."""
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, httpx.HTTPStatusError):
+            try:
+                body = current.response.json()
+            except ValueError:
+                return None
+            return str(body["error"]) if isinstance(body, dict) and body.get("error") else None
+        current = current.__cause__
+    return None
+
+
 def range_error_key(key_prefix: str, usage_point_id: str, start: str, end: str) -> str:
     """Cache négatif d'une plage rejetée par Enedis (ADAM-ERR0123, refus 400), valable pour cette plage EXACTE.
 
@@ -278,6 +296,68 @@ def range_error_key(key_prefix: str, usage_point_id: str, start: str, end: str) 
     service, est toujours demandée.
     """
     return f"{key_prefix}:{usage_point_id}:error:{start}:{end}"
+
+
+def rejected_day_key(key_prefix: str, usage_point_id: str, day: str) -> str:
+    """Cache négatif d'un jour ancien refusé en 400 par Enedis, quelle que soit la plage qui le contient."""
+    return f"{key_prefix}:{usage_point_id}:rejected:{day}"
+
+
+async def skip_rejected_days(
+    key_prefix: str, usage_point_id: str, missing_dates: list[str], encryption_key: str
+) -> tuple[list[str], list[str]]:
+    """Retire des jours à demander ceux encore marqués refusés. Renvoie (jours à demander, erreurs par plage)."""
+    still_missing: list[str] = []
+    rejected: dict[str, str] = {}
+    for day in missing_dates:
+        cached = await cache_service.get(rejected_day_key(key_prefix, usage_point_id, day), encryption_key)
+        if isinstance(cached, dict) and cached.get("error"):
+            rejected[day] = str(cached["error"])
+        else:
+            still_missing.append(day)
+    errors = [f"{rejected[start]} for {start} to {end}" for start, end in missing_ranges(list(rejected))]
+    return still_missing, errors
+
+
+async def remember_rejected_range(
+    key_prefix: str,
+    usage_point_id: str,
+    api_start: str,
+    api_end: str,
+    error: BaseException,
+    fetch: Callable[[str, str], Awaitable[Any]],
+    encryption_key: str,
+) -> None:
+    """Mémorise le refus 400 d'une plage ancienne (`error`, reconnu par enedis_rejected_range).
+
+    Un conteneur local recalcule ses fenêtres chaque jour depuis J-731 : décalées d'un jour, elles ne
+    retombent jamais sur la plage exacte de la veille. Les jours refusés sont donc marqués un par un.
+    Mais le refus porte sur la plage entière, et une fenêtre à cheval sur la mise en service est refusée
+    alors que ses derniers jours sont valides : le dernier jour est redemandé seul. Refusé lui aussi, le
+    refus tient à une date de début trop ancienne et vaut pour tous les jours de la plage ; accepté (ou
+    autre erreur), seule la plage exacte est mémorisée, sans masquer de jour valide. Un refus qui ne
+    porte pas sur la période (PERIOD_REJECTION_CODES) n'est mémorisé que pour la plage exacte : il peut
+    tomber dès que l'autorisation est corrigée.
+    """
+    rejected = str(error)
+    days = days_between(api_start, api_end)
+    period_rejected = enedis_error_code(error) in PERIOD_REJECTION_CODES
+    if period_rejected and len(days) > 1:
+        try:
+            await fetch(days[-1], api_end)
+            period_rejected = False
+        except Exception as e:
+            period_rejected = (
+                enedis_rejected_range(e, api_end, paris_today()) is not None
+                and enedis_error_code(e) in PERIOD_REJECTION_CODES
+            )
+    if not period_rejected:
+        error_key = range_error_key(key_prefix, usage_point_id, api_start, api_end)
+        await cache_service.set(error_key, {"error": rejected}, encryption_key)
+        return
+    for day in days:
+        day_key = rejected_day_key(key_prefix, usage_point_id, day)
+        await cache_service.set(day_key, {"error": rejected}, encryption_key, ttl=REJECTED_DAY_TTL_SECONDS)
 
 
 async def cached_daily_points(
@@ -307,7 +387,7 @@ async def cached_daily_points(
             missing_dates.append(date_str)
 
     unit = None
-    api_errors = []
+    missing_dates, api_errors = await skip_rejected_days(key_prefix, usage_point_id, missing_dates, encryption_key)
     today = paris_today()
     for api_start, api_end in missing_ranges(missing_dates):
         error_key = range_error_key(key_prefix, usage_point_id, api_start, api_end)
@@ -319,8 +399,8 @@ async def cached_daily_points(
         except Exception as e:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] {key_prefix} {api_start} to {api_end}: {e}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {e}")
-            if rejected := enedis_rejected_range(e, api_end, today):
-                await cache_service.set(error_key, {"error": rejected}, encryption_key)
+            if enedis_rejected_range(e, api_end, today):
+                await remember_rejected_range(key_prefix, usage_point_id, api_start, api_end, e, fetch, encryption_key)
             continue
         if error := enedis_business_error(data):
             log_with_pdl("warning", usage_point_id, f"[ENEDIS ERROR] {key_prefix} {api_start} to {api_end}: {error}")
@@ -998,11 +1078,11 @@ async def get_consumption_detail(
 
                 # Extract readings (points 2026)
                 readings = extract_points(data)
+                readings_by_date: dict[str, list[dict[str, Any]]] = {}
+                for reading in readings:
+                    readings_by_date.setdefault(reading.get("d", "")[:10], []).append(reading)
 
                 if use_cache:
-                    readings_by_date: dict[str, list[dict[str, Any]]] = {}
-                    for reading in readings:
-                        readings_by_date.setdefault(reading.get("d", "")[:10], []).append(reading)
                     for date_str, day_readings in readings_by_date.items():
                         interval_length = day_readings[0].get("p") or "PT30M"
                         cache_data = {
@@ -1016,6 +1096,10 @@ async def get_consumption_detail(
                     log_with_pdl("info", usage_point_id, f"[CACHE SET] {range_start} to {range_end} ({len(readings)} readings in {len(readings_by_date)} days)")
 
                 all_readings.extend(readings)
+                # Jour récent partiel absent de la réponse (Enedis sans erreur mais sans point) : servir le cache
+                for date_str in days_between(range_start, range_end):
+                    if date_str not in readings_by_date:
+                        all_readings.extend(partial_days.get(date_str, []))
 
             except Exception as e:
                 log_with_pdl("error", usage_point_id, f"[ERROR] Failed to fetch {range_start}-{range_end}: {e}")
@@ -1724,7 +1808,9 @@ async def get_production_detail(
             partial_days[date_str] = readings
         missing_dates.append(date_str)
 
-    api_errors = []
+    missing_dates, api_errors = await skip_rejected_days(
+        "production:detail:daily", usage_point_id, missing_dates, encryption_key
+    )
     for api_start, api_end in missing_ranges(missing_dates):
         error_key = range_error_key("production:detail:daily", usage_point_id, api_start, api_end)
         error = ((await cache_service.get(error_key, encryption_key)) or {}).get("error")
@@ -1735,8 +1821,18 @@ async def get_production_detail(
                     await cache_service.set(error_key, {"error": error}, encryption_key)
             except Exception as e:
                 error = str(e)
-                if rejected := enedis_rejected_range(e, api_end, today):
-                    await cache_service.set(error_key, {"error": rejected}, encryption_key)
+                if enedis_rejected_range(e, api_end, today):
+                    await remember_rejected_range(
+                        "production:detail:daily",
+                        usage_point_id,
+                        api_start,
+                        api_end,
+                        e,
+                        lambda probe_start, probe_end: adapter.get_production_detail(
+                            usage_point_id, probe_start, probe_end, secret
+                        ),
+                        encryption_key,
+                    )
         if error:
             log_with_pdl("warning", usage_point_id, f"[API ERROR] Production detail {api_start} to {api_end}: {error}")
             api_errors.append(f"Failed to fetch {api_start} to {api_end}: {error}")
@@ -1762,6 +1858,8 @@ async def get_production_detail(
                 points.extend(day_readings)
             elif not is_recent_day(date_str, today):
                 await cache_service.set(cache_key, EMPTY_DAY, encryption_key)
+            else:
+                points.extend(partial_days.get(date_str, []))  # jour récent sans point : garder le partiel en cache
 
     if api_errors and not points:
         return APIResponse(success=False, error=ErrorDetail(code="ENEDIS_ERROR", message="; ".join(api_errors)))

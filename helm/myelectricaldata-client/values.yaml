@@ -75,7 +75,7 @@ backend:
     timeoutSeconds: 5
     failureThreshold: 3
 
-  # Persistent storage for local data
+  # Persistent storage for local data (holds the SQLite database in SQLite mode)
   persistence:
     enabled: true
     size: 5Gi
@@ -278,6 +278,9 @@ postgres:
       memory: 256Mi
 
 # External database configuration (if postgres.enabled is false)
+# SQLite mode: postgres.enabled=false, empty host and existingSecret. The backend then stores its data in a
+# SQLite file on its PVC (backend.persistence, single replica). Simplest install, recommended for
+# a new one; switching between SQLite and PostgreSQL does not move the data.
 externalDatabase:
   host: ""
   port: 5432

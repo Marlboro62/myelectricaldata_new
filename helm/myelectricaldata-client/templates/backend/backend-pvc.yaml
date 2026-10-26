@@ -6,6 +6,11 @@ metadata:
   name: {{ include "myelectricaldata.backend.fullname" . }}
   labels:
     {{- include "myelectricaldata.backend.labels" . | nindent 4 }}
+  {{- if include "myelectricaldata.sqlite.enabled" . }}
+  # SQLite: the database lives here, keep it on uninstall like the postgres PVC
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   accessModes:
     - {{ .Values.backend.persistence.accessMode }}

@@ -24,6 +24,33 @@ from ..config import APP_VERSION, settings
 logger = logging.getLogger(__name__)
 
 
+class RateLimitExceededError(Exception):
+    """Exception levée lorsque le quota journalier d'appels API est atteint (HTTP 429)."""
+
+    def __init__(self, message: str = "Rate limit exceeded (HTTP 429)", retry_after: int | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.retry_after = retry_after
+
+
+def _quota_refusal(body: Any) -> str | None:
+    """Message du refus de quota porté par une réponse 200 de la passerelle, None sinon.
+
+    Sur /api/enedis/*, check_rate_limit (routers/enedis.py) ne lève pas de 429 : il répond 200 avec
+    {"success": false, "error": {"code": "RATE_LIMIT_EXCEEDED", "message": ...}}. Les routes à cache
+    (courbe de charge) répondent aussi {"success": true, "data": <cache partiel>,
+    "error": {"code": "PARTIAL_DATA", "message": "Rate limit exceeded. Returning cached data only."}}.
+    """
+    # PARTIAL_DATA n'est pas retenu : la réponse porte des données à garder, et ce code sert
+    # aussi aux données partielles côté Enedis, sans rapport avec le quota
+    if not isinstance(body, dict) or body.get("success") is not False:
+        return None
+    error = body.get("error")
+    if not isinstance(error, dict) or error.get("code") != "RATE_LIMIT_EXCEEDED":
+        return None
+    return str(error.get("message") or "RATE_LIMIT_EXCEEDED")
+
+
 class MyElectricalDataAdapter:
     """Adapter for MyElectricalData API (v2.myelectricaldata.fr)
 
@@ -107,9 +134,20 @@ class MyElectricalDataAdapter:
                 logger.debug(f"[MED] Response: {response.status_code}")
 
             response.raise_for_status()
-            return cast(dict[str, Any], response.json())
+            data = cast(dict[str, Any], response.json())
 
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                logger.warning(f"[MED] Quota journalier d'appels API atteint (HTTP 429) : {e.response.text}")
+                retry_after_header = e.response.headers.get("Retry-After")
+                retry_after = int(retry_after_header) if retry_after_header and retry_after_header.isdigit() else None
+                try:
+                    error_data = e.response.json()
+                    msg = error_data.get("detail") or error_data.get("message") or error_data.get("error_description") or e.response.text
+                except ValueError:
+                    msg = e.response.text
+                raise RateLimitExceededError(message=f"Rate limit exceeded (HTTP 429): {msg}", retry_after=retry_after) from e
+
             logger.error(f"[MED] API error: {e.response.status_code}")
             logger.error(f"[MED] Response: {e.response.text}")
 
@@ -127,6 +165,13 @@ class MyElectricalDataAdapter:
         except Exception as e:
             logger.error(f"[MED] Request error: {e}")
             raise
+
+        # Hors du try : le refus de quota ne doit pas être journalisé comme une erreur de requête
+        quota_message = _quota_refusal(data)
+        if quota_message:
+            logger.warning(f"[MED] Quota journalier d'appels API atteint : {quota_message}")
+            raise RateLimitExceededError(message=f"Rate limit exceeded: {quota_message}")
+        return data
 
     # =========================================================================
     # PDL / Usage Points
