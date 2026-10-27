@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.10.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.2...2.10.0) (2026-10-27)
+
+### Features
+
+* **web:** lien « Passerelle » dans le menu en mode client ([01cd966](https://github.com/MyElectricalData/myelectricaldata_new/commit/01cd966118b8bbb81b9a5c29ce0bc0fdbef775c5)), closes [#142](https://github.com/MyElectricalData/myelectricaldata_new/issues/142)
+
+### Bug Fixes
+
+* **api:** compter et expliquer l'import Energy Dashboard planifié ([8322f4b](https://github.com/MyElectricalData/myelectricaldata_new/commit/8322f4b37c35d397bfa94dc2c3d63b49409fcf62)), closes [#177](https://github.com/MyElectricalData/myelectricaldata_new/issues/177)
+* **api:** synchroniser et accepter les offres obsolètes en mode client ([6433bf7](https://github.com/MyElectricalData/myelectricaldata_new/commit/6433bf7b43368da99a4c256513de10684a024239)), closes [#173](https://github.com/MyElectricalData/myelectricaldata_new/issues/173)
+* **web:** texte d'exemple clair pour le jeton Home Assistant ([428de28](https://github.com/MyElectricalData/myelectricaldata_new/commit/428de2857d97d4084663923194cf3772741dedad)), closes [#177](https://github.com/MyElectricalData/myelectricaldata_new/issues/177)
+
 ## [2.9.2](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.1...2.9.2) (2026-10-27)
 
 ### Bug Fixes
