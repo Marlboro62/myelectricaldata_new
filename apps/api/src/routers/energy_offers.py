@@ -137,6 +137,41 @@ def apply_valid_to(offer: EnergyOffer, pricing: dict, log_prefix: str) -> None:
         logger.warning(f"{log_prefix} Invalid valid_to format: {valid_to_raw}")
 
 
+# Contribution NEW_PROVIDER sans offre : un contributeur propose seulement le fournisseur (issue #162)
+PROVIDER_ONLY_MARKER = "[NOUVEAU FOURNISSEUR]"
+
+
+def is_provider_only(contribution_type: str | None, offer_name: str | None) -> bool:
+    """Contribution qui crée un fournisseur sans aucune offre."""
+    return contribution_type == "NEW_PROVIDER" and (offer_name or "").startswith(PROVIDER_ONLY_MARKER)
+
+
+async def find_provider_by_name(db: AsyncSession, name: str) -> EnergyProvider | None:
+    """Fournisseur de même nom, sans tenir compte de la casse ni des espaces autour."""
+    result = await db.execute(
+        select(EnergyProvider).where(func.lower(func.trim(EnergyProvider.name)) == name.strip().lower())
+    )
+    return result.scalars().first()
+
+
+async def resolve_new_provider(contribution: OfferContribution, db: AsyncSession, log_prefix: str) -> str:
+    """Fournisseur d'une contribution NEW_PROVIDER : réutilisé s'il existe déjà, créé sinon.
+
+    `EnergyProvider.name` est unique : un fournisseur créé entre la soumission et l'approbation
+    (modérateur, contribution précédente du même lot) ne doit pas faire échouer l'approbation.
+    """
+    name = (contribution.provider_name or "").strip()
+    existing = await find_provider_by_name(db, name)
+    if existing:
+        logger.info(f"{log_prefix} Reusing existing provider: {existing.name} (id={existing.id})")
+        return existing.id
+    provider = EnergyProvider(name=name, website=contribution.provider_website)
+    db.add(provider)
+    await db.flush()
+    logger.info(f"{log_prefix} Created new provider: {name} (id={provider.id})")
+    return provider.id
+
+
 async def apply_contribution_changes(
     contribution: OfferContribution,
     db: AsyncSession,
@@ -157,24 +192,24 @@ async def apply_contribution_changes(
     """
     provider_id = contribution.existing_provider_id
 
-    # Création de fournisseur si nécessaire
+    # Création (ou réutilisation par nom) du fournisseur si nécessaire
     if contribution.contribution_type == "NEW_PROVIDER" and contribution.provider_name:
-        provider = EnergyProvider(name=contribution.provider_name, website=contribution.provider_website)
-        db.add(provider)
-        await db.flush()
-        provider_id = provider.id
+        provider_id = await resolve_new_provider(contribution, db, "[CONTRIBUTION]")
 
     if not provider_id:
         raise ValueError("Provider ID required")
 
     valid_from_date = contribution.valid_from or datetime.now(UTC)
+    provider_only = is_provider_only(contribution.contribution_type, contribution.offer_name)
 
     # Clore l'offre que remplace la nouvelle, en gardant l'historique
-    if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
+    if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"] and not provider_only:
         await close_replaced_offers(contribution, db, provider_id)
 
-    # Création ou mise à jour des offres
-    if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
+    # Création ou mise à jour des offres (aucune pour un fournisseur seul)
+    if provider_only:
+        logger.info(f"[CONTRIBUTION] Provider-only contribution, no offer created: {contribution.provider_name}")
+    elif contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
         if contribution.power_variants:
             # Format nouveau : une offre par variante de puissance
             # Les prix peuvent être dans chaque variant (prioritaire) ou dans pricing_data (fallback)
@@ -553,8 +588,10 @@ async def create_contribution(
     # Les suppressions (fournisseur ou offre obsolète) n'ont pas besoin de puissance
     offer_name = contribution_data.get("offer_name", "")
     is_deletion = "[SUPPRESSION" in offer_name
+    # Un fournisseur seul n'a ni offre ni puissance
+    provider_only = is_provider_only(contribution_data.get("contribution_type"), offer_name)
 
-    if not power_variants and power_kva_legacy is None and not is_deletion:
+    if not power_variants and power_kva_legacy is None and not is_deletion and not provider_only:
         return APIResponse(success=False, error=ErrorDetail(code="MISSING_FIELD", message="Au moins une puissance (kVA) est obligatoire"))
 
     # Validate power_variants format if provided
@@ -567,6 +604,14 @@ async def create_contribution(
                 return APIResponse(success=False, error=ErrorDetail(code="INVALID_FORMAT", message="Chaque variante doit être un objet"))
             if "power_kva" not in variant or "subscription_price" not in variant:
                 return APIResponse(success=False, error=ErrorDetail(code="MISSING_FIELD", message="Chaque variante doit contenir power_kva et subscription_price"))
+
+    if provider_only:
+        provider_name = (contribution_data.get("provider_name") or "").strip()
+        if not provider_name:
+            return APIResponse(success=False, error=ErrorDetail(code="MISSING_FIELD", message="Le nom du fournisseur est obligatoire"))
+        existing = await find_provider_by_name(db, provider_name)
+        if existing:
+            return APIResponse(success=False, error=ErrorDetail(code="PROVIDER_EXISTS", message=f"Le fournisseur {existing.name} existe déjà"))
 
     # Create contribution
     contribution = OfferContribution(
@@ -660,13 +705,24 @@ async def create_contributions_batch(
             offer_name = contribution_data.get("offer_name", "")
             is_deletion = "[SUPPRESSION" in offer_name
             is_reactivation = "[REACTIVATION]" in offer_name
+            provider_only = is_provider_only(contribution_data.get("contribution_type"), offer_name)
 
             power_variants = contribution_data.get("power_variants")
             power_kva_legacy = contribution_data.get("power_kva")
 
-            if not power_variants and power_kva_legacy is None and not is_deletion and not is_reactivation:
+            if not power_variants and power_kva_legacy is None and not is_deletion and not is_reactivation and not provider_only:
                 errors.append(f"Contribution {i + 1}: puissance (kVA) manquante")
                 continue
+
+            if provider_only:
+                provider_name = (contribution_data.get("provider_name") or "").strip()
+                if not provider_name:
+                    errors.append(f"Contribution {i + 1}: nom du fournisseur manquant")
+                    continue
+                existing = await find_provider_by_name(db, provider_name)
+                if existing:
+                    errors.append(f"Contribution {i + 1}: le fournisseur {existing.name} existe déjà")
+                    continue
 
             if power_variants:
                 if not isinstance(power_variants, list) or len(power_variants) == 0:
@@ -775,8 +831,9 @@ async def update_contribution(
     # Les suppressions (fournisseur ou offre obsolète) n'ont pas besoin de puissance
     offer_name = contribution_data.get("offer_name", "")
     is_deletion = "[SUPPRESSION" in offer_name
+    provider_only = is_provider_only(contribution_data.get("contribution_type", contribution.contribution_type), offer_name)
 
-    if not power_variants and power_kva_legacy is None and not is_deletion:
+    if not power_variants and power_kva_legacy is None and not is_deletion and not provider_only:
         return APIResponse(success=False, error=ErrorDetail(code="MISSING_FIELD", message="Au moins une puissance (kVA) est obligatoire"))
 
     # Validate power_variants format if provided
@@ -1362,23 +1419,8 @@ async def bulk_approve_contributions(
             provider_id = contribution.existing_provider_id
 
             if contribution.contribution_type == "NEW_PROVIDER" and contribution.provider_name:
-                # Check if provider already exists (may have been created by a previous contribution in this batch)
-                existing_provider_result = await db.execute(
-                    select(EnergyProvider).where(EnergyProvider.name == contribution.provider_name)
-                )
-                existing_provider = existing_provider_result.scalar_one_or_none()
-
-                if existing_provider:
-                    # Reuse existing provider
-                    provider_id = existing_provider.id
-                    logger.info(f"[BULK APPROVE] Reusing existing provider: {contribution.provider_name} (id={provider_id})")
-                else:
-                    # Create new provider
-                    provider = EnergyProvider(name=contribution.provider_name, website=contribution.provider_website)
-                    db.add(provider)
-                    await db.flush()
-                    provider_id = provider.id
-                    logger.info(f"[BULK APPROVE] Created new provider: {contribution.provider_name} (id={provider_id})")
+                # Même règle que l'approbation unitaire : réutilisé s'il existe (lot, modérateur), créé sinon
+                provider_id = await resolve_new_provider(contribution, db, "[BULK APPROVE]")
 
             if not provider_id:
                 skipped += 1
@@ -1388,7 +1430,10 @@ async def bulk_approve_contributions(
             # Create or update offer
             pricing = contribution.pricing_data
 
-            if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
+            if is_provider_only(contribution.contribution_type, contribution.offer_name):
+                logger.info(f"[BULK APPROVE] Provider-only contribution, no offer created: {contribution.provider_name}")
+
+            elif contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
                 # Create new offer
                 valid_from_date = contribution.valid_from or datetime.now(UTC)
                 # Extraire valid_to de pricing_data si présent (offres historiques)

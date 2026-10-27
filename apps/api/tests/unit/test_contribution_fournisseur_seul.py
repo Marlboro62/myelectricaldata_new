@@ -235,6 +235,7 @@ async def test_approbation_rattache_l_offre_d_une_contribution_complete_au_fourn
     existant = EnergyProvider(name="Plenitude")
     db.add(existant)
     await db.commit()
+    existant_id = existant.id  # relu avant expire_all : un chargement paresseux échouerait hors greenlet
     cid = await soumise(
         db, contributeur, offer_name="Pleniweb", power_kva=6,
         pricing_data={"subscription_price": 15.0, "base_price": 0.2},
@@ -245,7 +246,7 @@ async def test_approbation_rattache_l_offre_d_une_contribution_complete_au_fourn
     assert await nb_fournisseurs(db, "Plenitude") == 1
     db.expire_all()
     [offre] = (await db.execute(select(EnergyOffer))).scalars().all()
-    assert (offre.provider_id, offre.name, offre.power_kva) == (existant.id, "Pleniweb", 6)
+    assert (offre.provider_id, offre.name, offre.power_kva) == (existant_id, "Pleniweb", 6)
 
 
 @pytest.mark.asyncio
