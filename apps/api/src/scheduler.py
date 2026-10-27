@@ -373,6 +373,13 @@ class SyncScheduler:
                     + ha_results.get("tempo", 0)
                     + ha_results.get("ecowatt", 0)
                 )
+                # Statistiques importées dans l'Energy Dashboard (sinon « 0 records » même en cas de succès)
+                energy_results = ha_results.get("energy_dashboard") or {}
+                total_exported += (
+                    energy_results.get("consumption", 0)
+                    + energy_results.get("cost", 0)
+                    + energy_results.get("production", 0)
+                )
                 if ha_results.get("errors"):
                     errors.extend(ha_results["errors"])
             except Exception as e:
