@@ -1,0 +1,68 @@
+# MyElectricalData - Client Mode, image unique (recommandé)
+#
+# Le client local en UN conteneur : le front et l'API dans l'image client, une seule URL,
+# les données dans un fichier SQLite du volume myelectricaldata_data.
+#
+# Usage:
+#   cp .env.local-client.example .env   # puis renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
+#   docker compose -f docker-compose.client.yml up -d
+#
+# Docker Compose lit le fichier .env du dossier courant.
+# PostgreSQL (base existante ou externe) : renseigner DATABASE_URL, par ex.
+#   DATABASE_URL=postgresql+asyncpg://utilisateur:motdepasse@hote:5432/base
+# VictoriaMetrics (optionnel) : VICTORIAMETRICS_URL.
+#
+# Depuis docker-compose.sqlite.yml (deux conteneurs), dans le même dossier, données conservées :
+#   docker compose -f docker-compose.client.yml up -d --remove-orphans
+#
+# Port : http://localhost:8100 (front et API sous /api)
+
+services:
+  client:
+    image: ghcr.io/myelectricaldata/myelectricaldata_new/client:latest
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-8100}:80"
+    environment:
+      # === System ===
+      - TZ=${TZ:-Europe/Paris}
+
+      # === MyElectricalData API (REQUIRED) ===
+      # Get credentials from https://www.v2.myelectricaldata.fr > Settings > API
+      - MED_CLIENT_ID=${MED_CLIENT_ID}
+      - MED_CLIENT_SECRET=${MED_CLIENT_SECRET}
+      - MED_API_URL=${MED_API_URL:-https://www.v2.myelectricaldata.fr/api}
+
+      # === Database ===
+      # Vide : fichier SQLite du volume /app/data (créé et migré au premier démarrage)
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/myelectricaldata.db}
+
+      # === VictoriaMetrics (optional) ===
+      - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-}
+
+      # === Security ===
+      # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # Empty: random key at each start (sessions lost on restart)
+      - SECRET_KEY=${SECRET_KEY:-}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-43200}
+      # Hosts accepted in the Host header, comma separated (empty: every host)
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
+
+      # === Application ===
+      - DEBUG=${DEBUG:-false}
+
+      # === Front : valeurs par défaut des formulaires d'export (nouvelle configuration) ===
+      - VITE_DEFAULT_MQTT_BROKER=${VITE_DEFAULT_MQTT_BROKER:-}
+      - VITE_DEFAULT_MQTT_PORT=${VITE_DEFAULT_MQTT_PORT:-1883}
+      - VITE_DEFAULT_TOPIC_PREFIX=${VITE_DEFAULT_TOPIC_PREFIX:-myelectricaldata}
+      - VITE_DEFAULT_ENTITY_PREFIX=${VITE_DEFAULT_ENTITY_PREFIX:-myelectricaldata}
+      - VITE_DEFAULT_DISCOVERY_PREFIX=${VITE_DEFAULT_DISCOVERY_PREFIX:-homeassistant}
+      - VITE_DEFAULT_HA_URL=${VITE_DEFAULT_HA_URL:-}
+      - VITE_DEFAULT_VM_URL=${VITE_DEFAULT_VM_URL:-}
+    # Santé : HEALTHCHECK de l'image (/api/ping à travers nginx)
+    volumes:
+      - myelectricaldata_data:/app/data
+
+volumes:
+  myelectricaldata_data:
