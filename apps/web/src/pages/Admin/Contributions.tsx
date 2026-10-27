@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Users, CheckCircle, XCircle, User, Package, DollarSign, ExternalLink, Image, Zap, MessageCircle, Clock, ArrowUpDown, Award, ChevronDown, ChevronRight, Calendar } from 'lucide-react'
 import { energyApi } from '@/api/energy'
+import { isProviderOnlyContribution } from '@/pages/Contribute/utils/contribute.utils'
 import ChatWhatsApp, { type ChatMessage } from '@/components/ChatWhatsApp'
 
 interface ExistingProvider {
@@ -490,8 +491,9 @@ export default function Contributions() {
     return `${numPrice.toFixed(2)} €/mois`
   }
 
-  const getContributionTypeLabel = (type: string) => {
-    switch (type) {
+  const getContributionTypeLabel = (contribution: { contribution_type: string; offer_name?: string | null }) => {
+    if (isProviderOnlyContribution(contribution)) return 'Nouveau fournisseur seul'
+    switch (contribution.contribution_type) {
       case 'NEW_PROVIDER':
         return 'Nouveau fournisseur + offre'
       case 'NEW_OFFER':
@@ -499,7 +501,7 @@ export default function Contributions() {
       case 'UPDATE_OFFER':
         return 'Mise à jour offre'
       default:
-        return type
+        return contribution.contribution_type
     }
   }
 
@@ -1079,6 +1081,7 @@ export default function Contributions() {
                   const pricing: PricingData = contribution.pricing_data || {}
                   const powerVariants = contribution.power_variants || []
                   const isExpanded = expandedOffers.has(contribution.id)
+                  const providerOnly = isProviderOnlyContribution(contribution)
                   const providerName = contribution.contribution_type === 'NEW_PROVIDER'
                     ? contribution.provider_name
                     : contribution.existing_provider?.name || 'Fournisseur inconnu'
@@ -1119,11 +1122,13 @@ export default function Contributions() {
 
                         {/* Badges */}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                            {getOfferTypeLabel(contribution.offer_type)}
-                          </span>
+                          {!providerOnly && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                              {getOfferTypeLabel(contribution.offer_type)}
+                            </span>
+                          )}
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                            {getContributionTypeLabel(contribution.contribution_type)}
+                            {getContributionTypeLabel(contribution)}
                           </span>
                           {contribution.valid_from && (
                             <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -1222,6 +1227,15 @@ export default function Contributions() {
                             </div>
 
                             {/* Pricing Info */}
+                            {providerOnly ? (
+                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                                <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-gray-900 dark:text-white">
+                                  <DollarSign size={16} />
+                                  Tarification
+                                </h3>
+                                <p>Aucune offre : l'approbation crée seulement le fournisseur. Ses offres seront proposées ensuite.</p>
+                              </div>
+                            ) : (
                             <div>
                               <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
                                 <DollarSign size={16} />
@@ -1276,6 +1290,7 @@ export default function Contributions() {
                                 )}
                               </div>
                             </div>
+                            )}
                           </div>
 
                           {/* Comparaison des tarifs pour UPDATE_OFFER */}

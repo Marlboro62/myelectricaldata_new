@@ -1,7 +1,7 @@
 import { ExternalLink, Copy, MessageCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { type Contribution } from '@/api/energy'
 import ChatWhatsApp, { type ChatMessage } from '@/components/ChatWhatsApp'
-import { getOfferTypeLabel, formatPrice } from '../../utils'
+import { getOfferTypeLabel, formatPrice, isProviderOnlyContribution } from '../../utils'
 
 interface ContributionCardProps {
   contribution: Contribution
@@ -48,7 +48,7 @@ export default function ContributionCard({
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-base truncate">{contribution.offer_name}</h3>
               <span className="text-xs px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded shrink-0">
-                {getOfferTypeLabel(contribution.offer_type)}
+                {isProviderOnlyContribution(contribution) ? 'Nouveau fournisseur' : getOfferTypeLabel(contribution.offer_type)}
               </span>
               {contribution.power_kva && (
                 <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded shrink-0">

@@ -5,7 +5,7 @@ import { CheckCircle, Clock, XCircle, List, ChevronDown, ChevronRight, MessageCi
 import { energyApi, type Contribution } from '@/api/energy'
 import ChatWhatsApp, { type ChatMessage } from '@/components/ChatWhatsApp'
 import { toast } from '@/stores/notificationStore'
-import { formatPrice, getOfferTypeLabel } from '../../utils'
+import { formatPrice, getOfferTypeLabel, isProviderOnlyContribution } from '../../utils'
 
 export default function MyContributions() {
   const queryClient = useQueryClient()
@@ -141,7 +141,7 @@ export default function MyContributions() {
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-base text-gray-900 dark:text-white truncate">{contribution.offer_name}</h3>
               <span className="text-xs px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded shrink-0">
-                {getOfferTypeLabel(contribution.offer_type)}
+                {isProviderOnlyContribution(contribution) ? 'Nouveau fournisseur' : getOfferTypeLabel(contribution.offer_type)}
               </span>
               {contribution.power_kva && (
                 <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded shrink-0">
