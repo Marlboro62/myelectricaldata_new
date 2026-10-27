@@ -17,6 +17,10 @@ CLIENT_DOCKERFILE=${CLIENT_DOCKERFILE:-apps/client/Dockerfile}
 CLIENT_IMAGE=${CLIENT_IMAGE:-med75-client:smoke}
 WEB_IMAGE=med75-web:smoke
 RUN_ID=$$
+# Compte factice, passerelle injoignable sur l'instant (port local fermé) : le démarrage de l'API
+# tente une synchro des PDL qui, vers la vraie passerelle, peut attendre son délai de 60 s selon
+# le réseau du moteur Docker. Le test mesure l'image, pas la passerelle.
+FAKE_ACCOUNT=(-e MED_CLIENT_ID=fake -e MED_CLIENT_SECRET=fake -e MED_API_URL=http://127.0.0.1:9/api)
 PASS=0
 FAIL=0
 CONTAINERS=()
@@ -188,7 +192,7 @@ test_client() {
   section "Image client : démarrage (sans volume, SQLite, identifiants factices)"
   local c=med75-client-$RUN_ID t0 t1 port
   t0=$(date +%s)
-  start "$c" "$CLIENT_IMAGE" -e MED_CLIENT_ID=fake -e MED_CLIENT_SECRET=fake -e "VITE_DEFAULT_MQTT_BROKER=$MQTT_TRAP"
+  start "$c" "$CLIENT_IMAGE" "${FAKE_ACCOUNT[@]}" -e "VITE_DEFAULT_MQTT_BROKER=$MQTT_TRAP"
   port=$(host_port "$c")
   if wait_http "http://127.0.0.1:$port/api/ping" 120; then
     t1=$(date +%s)
@@ -234,20 +238,20 @@ test_client() {
 
   section "Image client : un processus meurt, le conteneur s'arrête"
   local api_pid
-  api_pid=$(pid_of "$c" 'src.main:app') && docker exec "$c" kill -9 "$api_pid"
+  api_pid=$(pid_of "$c" 'src.main:app') && docker exec "$c" sh -c "kill -9 $api_pid"
   check "uvicorn tué : conteneur arrêté sous 15 s, code non nul" exited_nonzero "$c" 15
 
   local n=med75-client-n-$RUN_ID
-  start "$n" "$CLIENT_IMAGE" -e MED_CLIENT_ID=fake -e MED_CLIENT_SECRET=fake
+  start "$n" "$CLIENT_IMAGE" "${FAKE_ACCOUNT[@]}"
   wait_http "http://127.0.0.1:$(host_port "$n")/api/ping" 120 >/dev/null
   local nginx_pid
-  nginx_pid=$(pid_of "$n" 'nginx: master') && docker exec "$n" kill -9 "$nginx_pid"
+  nginx_pid=$(pid_of "$n" 'nginx: master') && docker exec "$n" sh -c "kill -9 $nginx_pid"
   check "nginx tué : conteneur arrêté sous 15 s, code non nul" exited_nonzero "$n" 15
 
   section "Image client : arrêt propre et persistance du volume"
   local v=med75-vol-$RUN_ID s=med75-client-s-$RUN_ID
   VOLUMES+=("$v")
-  start "$s" "$CLIENT_IMAGE" -e MED_CLIENT_ID=fake -e MED_CLIENT_SECRET=fake -v "$v:/app/data"
+  start "$s" "$CLIENT_IMAGE" "${FAKE_ACCOUNT[@]}" -v "$v:/app/data"
   wait_http "http://127.0.0.1:$(host_port "$s")/api/ping" 120 >/dev/null
   local ts
   ts=$(date +%s)
@@ -255,7 +259,7 @@ test_client() {
   check "docker stop (SIGTERM) : arrêt sous 10 s, sans SIGKILL" stopped_clean "$s" $(($(date +%s) - ts))
   docker rm -f "$s" >/dev/null
   local s2=med75-client-s2-$RUN_ID
-  start "$s2" "$CLIENT_IMAGE" -e MED_CLIENT_ID=fake -e MED_CLIENT_SECRET=fake -v "$v:/app/data"
+  start "$s2" "$CLIENT_IMAGE" "${FAKE_ACCOUNT[@]}" -v "$v:/app/data"
   check "conteneur recréé sur le même volume : base conservée, démarrage OK" ready_with_db "$s2"
 }
 
