@@ -46,9 +46,11 @@ RUN mkdir -p /etc/nginx/api-proxy
 # Copy built files from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy entrypoint script for runtime env injection
+# Copy entrypoint script for runtime env injection (env.js et proxy /api : runtime-config.sh,
+# partagé avec l'image client)
+COPY runtime-config.sh /runtime-config.sh
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /runtime-config.sh /entrypoint.sh
 
 # Expose port
 EXPOSE 80
