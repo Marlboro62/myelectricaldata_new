@@ -410,18 +410,23 @@ class MyElectricalDataAdapter:
         """
         return await self._make_request("GET", "/energy/providers")
 
-    async def get_energy_offers(self, provider_id: Optional[str] = None) -> dict[str, Any]:
+    async def get_energy_offers(
+        self, provider_id: Optional[str] = None, include_history: bool = False
+    ) -> dict[str, Any]:
         """Get list of energy offers from the gateway
 
         Args:
             provider_id: Optional provider ID to filter offers
+            include_history: Also return inactive / expired offers (grilles obsolètes)
 
         Returns:
             Dict with success status and list of offers
         """
-        params = {}
+        params: dict[str, Any] = {}
         if provider_id:
             params["provider_id"] = provider_id
+        if include_history:
+            params["include_history"] = "true"
         return await self._make_request("GET", "/energy/offers", params=params or None)
 
     # =========================================================================
