@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Body
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, UTC
+from datetime import date, datetime, time, timedelta, UTC
+from zoneinfo import ZoneInfo
 from ..models import User, EnergyProvider, EnergyOffer, OfferContribution, ContributionMessage
 from ..models.database import get_db
 from ..schemas import APIResponse, ErrorDetail
@@ -30,23 +31,49 @@ def parse_iso_datetime(value: str | None) -> datetime | None:
         return None
 
 
+PARIS = ZoneInfo("Europe/Paris")
+
+
+def end_of_day(day: date) -> datetime:
+    """Dernière seconde d'un jour à l'heure de Paris, en UTC.
+
+    Une offre close « au 31/07 » reste en vigueur tout le 31/07 pour le simulateur et l'export HA,
+    qui comparent valid_to à l'instant présent ; le front, lui, lit le jour 'YYYY-MM-DD'.
+    """
+    return datetime.combine(day, time(23, 59, 59), tzinfo=PARIS).astimezone(UTC)
+
+
+def parse_valid_to(raw: str) -> datetime:
+    """valid_to d'une contribution : une date seule vaut jusqu'à la fin de ce jour, un instant ISO est gardé."""
+    if len(raw) == 10:
+        return end_of_day(date.fromisoformat(raw))
+    value = datetime.fromisoformat(raw)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 async def deactivate_previous_offers(
     db: AsyncSession,
     provider_id: str,
     offer_type: str,
+    offer_name: str,
+    power_kva: int | None,
     valid_from: datetime
 ) -> int:
-    """Désactive les offres précédentes avec même provider_id + offer_type.
+    """Clôt l'offre ouverte que remplace une nouvelle offre, à la veille de son début.
 
-    Quand une nouvelle offre est approuvée, les anciennes offres du même
-    fournisseur et type sont désactivées en définissant leur valid_to.
-    Les offres ne sont jamais supprimées pour conserver l'historique.
+    Seule la même offre (même fournisseur, type, nom et puissance), ouverte et antérieure,
+    est close : les autres offres du fournisseur, les puissances sœurs d'une même grille et
+    une clôture déjà posée restent intactes. Les offres ne sont jamais supprimées pour
+    conserver l'historique. Fin à la veille, à minuit heure de Paris (end_of_day) : le front
+    compare les périodes bornes incluses, le simulateur et l'export HA à l'instant présent.
 
     Args:
         db: Session de base de données
         provider_id: ID du fournisseur
         offer_type: Type d'offre (BASE, HC_HP, TEMPO, etc.)
-        valid_from: Date de début de la nouvelle offre (devient valid_to des anciennes)
+        offer_name: Nom canonique de l'offre (sans la puissance)
+        power_kva: Puissance de la nouvelle offre
+        valid_from: Date de début de la nouvelle offre (sa veille devient valid_to de l'ancienne)
 
     Returns:
         Nombre d'offres désactivées
@@ -54,18 +81,60 @@ async def deactivate_previous_offers(
     query = select(EnergyOffer).where(
         EnergyOffer.provider_id == provider_id,
         EnergyOffer.offer_type == offer_type,
+        EnergyOffer.name == offer_name,
+        EnergyOffer.power_kva.is_(None) if power_kva is None else EnergyOffer.power_kva == power_kva,
         EnergyOffer.valid_to.is_(None),  # Seulement les offres actives (sans date de fin)
+        EnergyOffer.valid_from.is_(None) | (EnergyOffer.valid_from < valid_from),
     )
     result = await db.execute(query)
     previous_offers = result.scalars().all()
 
-    count = 0
+    start = valid_from if valid_from.tzinfo else valid_from.replace(tzinfo=UTC)
+    valid_to = end_of_day(start.astimezone(UTC).date() - timedelta(days=1))
     for offer in previous_offers:
-        offer.valid_to = valid_from
-        count += 1
-        logger.info(f"[CONTRIBUTION] Désactivation offre: {offer.name} (id={offer.id}) - valid_to={valid_from}")
+        offer.valid_to = valid_to
+        logger.info(f"[CONTRIBUTION] Désactivation offre: {offer.name} (id={offer.id}) - valid_to={valid_to}")
 
-    return count
+    return len(previous_offers)
+
+
+async def close_replaced_offers(contribution: OfferContribution, db: AsyncSession, provider_id: str) -> None:
+    """Clôt, pour chaque puissance d'une contribution NEW_OFFER, l'offre ouverte qu'elle remplace.
+
+    Une offre historique (valid_to dans pricing_data) s'ajoute au passé et ne clôt rien.
+    """
+    if (contribution.pricing_data or {}).get("valid_to"):
+        return
+    valid_from = contribution.valid_from or datetime.now(UTC)
+    if contribution.power_variants:
+        powers = [variant.get("power_kva") for variant in contribution.power_variants]
+    else:
+        powers = [contribution.power_kva]
+    name = clean_offer_name(contribution.offer_name)
+    for power_kva in powers:
+        count = await deactivate_previous_offers(db, provider_id, contribution.offer_type, name, power_kva, valid_from)
+        if count > 0:
+            logger.info(f"[CONTRIBUTION] Désactivé {count} offre(s) remplacée(s) par {name} {power_kva} kVA")
+
+
+def apply_valid_to(offer: EnergyOffer, pricing: dict, log_prefix: str) -> None:
+    """Applique le valid_to d'une contribution UPDATE_OFFER : chaîne vide = réactivation, date = clôture."""
+    valid_to_raw = pricing.get("valid_to")
+    if valid_to_raw is None:
+        return
+    if valid_to_raw == "" or valid_to_raw is False:
+        # Valeur vide = réactivation (supprimer la date de fin)
+        offer.valid_to = None
+        offer.is_active = True
+        logger.info(f"{log_prefix} Réactivation offre via valid_to vide: {offer.name} (id={offer.id})")
+        return
+    try:
+        if isinstance(valid_to_raw, str):
+            valid_to_date = parse_valid_to(valid_to_raw)
+            offer.valid_to = valid_to_date
+            logger.info(f"{log_prefix} Mise à jour valid_to: {offer.name} (id={offer.id}) -> {valid_to_date}")
+    except (ValueError, TypeError):
+        logger.warning(f"{log_prefix} Invalid valid_to format: {valid_to_raw}")
 
 
 async def apply_contribution_changes(
@@ -100,13 +169,9 @@ async def apply_contribution_changes(
 
     valid_from_date = contribution.valid_from or datetime.now(UTC)
 
-    # Désactiver les offres existantes pour l'historique
+    # Clore l'offre que remplace la nouvelle, en gardant l'historique
     if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
-        deactivated_count = await deactivate_previous_offers(
-            db, provider_id, contribution.offer_type, valid_from_date
-        )
-        if deactivated_count > 0:
-            logger.info(f"[CONTRIBUTION] Désactivé {deactivated_count} offres précédentes pour {provider_id}/{contribution.offer_type}")
+        await close_replaced_offers(contribution, db, provider_id)
 
     # Création ou mise à jour des offres
     if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
@@ -120,9 +185,7 @@ async def apply_contribution_changes(
             if valid_to_raw:
                 try:
                     if isinstance(valid_to_raw, str):
-                        valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                        if valid_to_date.tzinfo is None:
-                            valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                        valid_to_date = parse_valid_to(valid_to_raw)
                 except (ValueError, TypeError):
                     logger.warning(f"[CONTRIBUTION] Invalid valid_to format: {valid_to_raw}")
             for variant in contribution.power_variants:
@@ -174,9 +237,7 @@ async def apply_contribution_changes(
             if valid_to_raw:
                 try:
                     if isinstance(valid_to_raw, str):
-                        valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                        if valid_to_date.tzinfo is None:
-                            valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                        valid_to_date = parse_valid_to(valid_to_raw)
                 except (ValueError, TypeError):
                     logger.warning(f"[CONTRIBUTION] Invalid valid_to format: {valid_to_raw}")
 
@@ -326,23 +387,7 @@ async def apply_contribution_changes(
                 if contribution.valid_from:
                     offer.valid_from = contribution.valid_from
                 # Gérer valid_to depuis pricing_data
-                valid_to_raw = pricing.get("valid_to")
-                if valid_to_raw is not None:
-                    if valid_to_raw == "" or valid_to_raw is False:
-                        # Valeur vide = réactivation (supprimer la date de fin)
-                        offer.valid_to = None
-                        offer.is_active = True
-                        logger.info(f"[CONTRIBUTION] Réactivation offre via valid_to vide: {offer.name} (id={offer.id})")
-                    else:
-                        try:
-                            if isinstance(valid_to_raw, str):
-                                valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                                if valid_to_date.tzinfo is None:
-                                    valid_to_date = valid_to_date.replace(tzinfo=UTC)
-                                offer.valid_to = valid_to_date
-                                logger.info(f"[CONTRIBUTION] Mise à jour valid_to: {offer.name} (id={offer.id}) -> {valid_to_date}")
-                        except (ValueError, TypeError):
-                            logger.warning(f"[CONTRIBUTION] Invalid valid_to format: {valid_to_raw}")
+                apply_valid_to(offer, pricing, "[CONTRIBUTION]")
                 offer.updated_at = datetime.now(UTC)
 
     # Marquer la contribution comme approuvée
@@ -1346,16 +1391,13 @@ async def bulk_approve_contributions(
             if contribution.contribution_type in ["NEW_OFFER", "NEW_PROVIDER"]:
                 # Create new offer
                 valid_from_date = contribution.valid_from or datetime.now(UTC)
-
                 # Extraire valid_to de pricing_data si présent (offres historiques)
                 valid_to_date = None
                 valid_to_raw = pricing.pop("valid_to", None) if pricing else None
                 if valid_to_raw:
                     try:
                         if isinstance(valid_to_raw, str):
-                            valid_to_date = datetime.fromisoformat(valid_to_raw.replace("Z", "+00:00"))
-                            if valid_to_date.tzinfo is None:
-                                valid_to_date = valid_to_date.replace(tzinfo=UTC)
+                            valid_to_date = parse_valid_to(valid_to_raw)
                     except (ValueError, TypeError):
                         logger.warning(f"[BULK APPROVE] Invalid valid_to format: {valid_to_raw}")
 
@@ -1391,6 +1433,10 @@ async def bulk_approve_contributions(
                     offer_url=contribution.price_sheet_url,
                     price_updated_at=datetime.now(UTC),
                 )
+                # Clore l'offre remplacée, comme l'approbation unitaire. Après la construction de la
+                # nouvelle offre : une erreur ci-dessus (contribution illisible) est attrapée sans
+                # rollback, et une clôture déjà posée serait validée sans remplaçante.
+                await close_replaced_offers(contribution, db, provider_id)
                 db.add(offer)
                 if valid_to_date:
                     logger.info(f"[BULK APPROVE] Created historical offer: {contribution.offer_name} valid_to={valid_to_date}")
@@ -1537,6 +1583,7 @@ async def bulk_approve_contributions(
                         offer.hc_schedules = contribution.hc_schedules
                         if contribution.valid_from:
                             offer.valid_from = contribution.valid_from
+                        apply_valid_to(offer, pricing, "[BULK APPROVE]")
                         offer.updated_at = datetime.now(UTC)
 
             # Mark contribution as approved
