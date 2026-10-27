@@ -2,6 +2,8 @@ name: Build Docker Images (Manual)
 
 # This workflow is for manual builds only.
 # Automatic releases are handled by release.yml
+# amd64 et arm64 sont construits en natif (runners ubuntu-24.04-arm, sans QEMU),
+# poussés par digest puis réunis en une image multi-architecture.
 
 on:
   workflow_dispatch:
@@ -9,10 +11,6 @@ on:
       version:
         description: 'Version tag (e.g., 1.0.0 or 1.0.0-dev.1)'
         required: true
-      build_arm64:
-        description: 'Build ARM64 images (slow, uses QEMU emulation)'
-        type: boolean
-        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -20,25 +18,28 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
+        image: [backend, frontend]
+        arch: [amd64, arm64]
         include:
           - image: backend
             context: ./apps/api
           - image: frontend
             context: ./apps/web
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,42 +51,71 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine tags
-        id: tags
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}"
-
-          TAGS="${IMAGE}:${VERSION}"
-
-          if [[ "$VERSION" == *"-dev."* ]]; then
-            TAGS="${TAGS},${IMAGE}:dev"
-          else
-            TAGS="${TAGS},${IMAGE}:latest"
-          fi
-
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
-
-      - name: Determine platforms
-        id: platforms
-        run: |
-          if [[ "${{ github.event.inputs.build_arm64 }}" == "true" ]]; then
-            echo "platforms=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
-          else
-            echo "platforms=linux/amd64" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push ${{ matrix.image }}
+      - name: Build and push ${{ matrix.image }} (${{ matrix.arch }}) by digest
+        id: build
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
           context: ${{ matrix.context }}
-          platforms: ${{ steps.platforms.outputs.platforms }}
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.event.inputs.version }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    name: Publish ${{ matrix.image }} (multi-arch)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [backend, frontend]
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          IMAGE: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+        run: |
+          if [[ "$VERSION" == *"-dev."* ]]; then EXTRA=dev; else EXTRA=latest; fi
+          docker buildx imagetools create -t "$IMAGE:$VERSION" -t "$IMAGE:$EXTRA" \
+            $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
