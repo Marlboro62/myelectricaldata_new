@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.9.2](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.1...2.9.2) (2026-10-27)
+
+### Bug Fixes
+
+* **api:** MED-53 / approbation d'une nouvelle grille identique en unitaire et en lot ([2e9e319](https://github.com/MyElectricalData/myelectricaldata_new/commit/2e9e3193f7d92d2981778045c970b37fffdfc17c)), closes [#145](https://github.com/MyElectricalData/myelectricaldata_new/issues/145)
+* **contribute:** MED-53 / revue Codex, lot sans clôture orpheline et réimport sans clôture périmée ([37f938a](https://github.com/MyElectricalData/myelectricaldata_new/commit/37f938a959a8604aecc0404da4b24e7b9cf66b11))
+* **contribute:** MED-53 / veille couverte jusqu'a minuit heure de Paris et grille sans valid_from close ([b89dd0e](https://github.com/MyElectricalData/myelectricaldata_new/commit/b89dd0efedf5efd28d9d20e8af10eb773c4322e3)), closes [#158](https://github.com/MyElectricalData/myelectricaldata_new/issues/158)
+* **web:** MED-53 / grilles ouvertes multiples et groupes compares avec leur nom ([d512d40](https://github.com/MyElectricalData/myelectricaldata_new/commit/d512d402e22fb6bd4c4a75fb9714fff2ebd85ff7)), closes [#158](https://github.com/MyElectricalData/myelectricaldata_new/issues/158)
+* **web:** MED-53 / import IA, une nouvelle grille clot l'ancienne a la veille ([ac093cd](https://github.com/MyElectricalData/myelectricaldata_new/commit/ac093cd6c618562a6c0b448b11559369f8cf2616)), closes [#145](https://github.com/MyElectricalData/myelectricaldata_new/issues/145)
+* **web:** MED-53 / revue, cloture apres validation et debuts compares au jour ([7cab82b](https://github.com/MyElectricalData/myelectricaldata_new/commit/7cab82b3bacd515b0ef72fd3963cb1df774cc218))
+
 ## [2.9.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.0...2.9.1) (2026-10-26)
 
 ### Bug Fixes
