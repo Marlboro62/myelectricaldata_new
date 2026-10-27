@@ -24,9 +24,26 @@ Les API Enedis sont réservées aux professionnels disposant d'un SIRET. MyElect
 myelectricaldata_new/
 ├── apps/
 │   ├── api/          # FastAPI backend
+│   ├── client/       # Single-container image of the local client (web + API)
 │   └── web/          # React + Vite frontend
+├── docker-compose.client.yml   # Local client, one container (recommended)
 └── docker-compose.yml
 ```
+
+## Local client in one container
+
+The local client (client mode) ships as a single image, `ghcr.io/myelectricaldata/myelectricaldata_new/client`:
+nginx serves the web UI and forwards `/api` to the API inside the same container. One service, one port, one volume.
+
+```bash
+cp .env.local-client.example .env   # set MED_CLIENT_ID and MED_CLIENT_SECRET
+docker compose -f docker-compose.client.yml up -d
+open http://localhost:8100
+```
+
+Coming from the two-container setup (`docker-compose.sqlite.yml`), run
+`docker compose -f docker-compose.client.yml up -d --remove-orphans` from the same folder: the
+`myelectricaldata_data` volume is kept. Full guide: `docs/local-client/installation/docker.md`.
 
 ## Running with Docker
 

@@ -111,8 +111,8 @@ cp .env.local-client.example .env
 # Éditer .env avec vos credentials API
 vim .env
 
-# Démarrer le mode client (base SQLite ; docker-compose.yml pour PostgreSQL)
-docker compose -f docker-compose.sqlite.yml up -d
+# Démarrer le mode client (un seul conteneur, base SQLite)
+docker compose -f docker-compose.client.yml up -d
 ```
 
 **Accès** : http://localhost:8100 (port différent du mode serveur)
@@ -126,12 +126,13 @@ Les deux modes peuvent tourner en parallèle sur la même machine :
 | Mode | Frontend | Backend | Base de données |
 |------|----------|---------|-----------------|
 | Serveur | :8000 | :8081 | PostgreSQL :5432 (interne) |
-| Client | :8100 | :8181 | SQLite (fichier), ou PostgreSQL :5433 (interne) |
+| Client (un conteneur) | :8100 | :8100/api | SQLite (fichier), ou PostgreSQL externe |
+| Client (deux conteneurs) | :8100 | :8181 | SQLite (fichier), ou PostgreSQL :5433 (interne) |
 
 ```bash
 # Démarrer les deux modes simultanément
 docker compose -f docker-compose.server.yml up -d    # Mode serveur
-docker compose -f docker-compose.sqlite.yml up -d    # Mode client
+docker compose -f docker-compose.client.yml up -d    # Mode client
 ```
 
 ---
