@@ -1,7 +1,10 @@
 """Import de l'historique de l'ancien client local myelectricaldata_import (« V1 ») dans le client V2 (MED-60).
 
 La V1 garde tout dans un SQLite `/data/cache.db` (ou une base PostgreSQL via `storage_uri`),
-au schéma Alembic `e990284249e4` dans toutes ses versions publiées (0.x). La V2 ne
+au schéma Alembic `e990284249e4` dans toutes ses versions publiées (0.x). Des images non
+publiées en portent d'autres (`d4f21c9a8b6e`, issue #164) : c'est le schéma réellement lu
+(`V1_COLUMNS`) qui décide, une autre révision aux colonnes conformes s'importe et le bilan
+la signale. La V2 ne
 resynchronise que 1095 jours de journalier et 730 jours de courbe de charge : sans import,
 l'historique plus ancien est perdu.
 
@@ -20,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import bindparam, func, select, text
+from sqlalchemy import bindparam, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -37,6 +40,13 @@ PARIS = ZoneInfo("Europe/Paris")
 # ~8 colonnes par ligne : reste loin des 32 767 paramètres d'une requête PostgreSQL
 BATCH_SIZE = 2000
 DIRECTIONS = ("consumption", "production")
+# Tables et colonnes que l'import lit : seules elles décident d'accepter une base V1, quelle que soit sa révision
+V1_COLUMNS: dict[str, tuple[str, ...]] = {
+    "usage_points": ("usage_point_id",),
+    **{f"{d}_daily": ("usage_point_id", "date", "value", "blacklist", "fail_count") for d in DIRECTIONS},
+    **{f"{d}_detail": ("usage_point_id", "date", "value", "interval") for d in DIRECTIONS},
+    "consumption_daily_max_power": ("usage_point_id", "date", "event_date", "value", "blacklist", "fail_count"),
+}
 
 
 class V1SchemaError(Exception):
@@ -71,6 +81,7 @@ async def _check_target(db: AsyncSession) -> None:
 class V1Records:
     """Lignes V2 tirées d'une base V1, et décompte des lignes écartées par motif."""
 
+    revision: str | None = None
     usage_points: list[str] = field(default_factory=list)
     consumption: list[dict[str, Any]] = field(default_factory=list)
     production: list[dict[str, Any]] = field(default_factory=list)
@@ -81,6 +92,7 @@ class V1Records:
 @dataclass
 class ImportReport:
     dry_run: bool
+    v1_revision: str | None = None
     inserted: dict[str, int] = field(default_factory=dict)
     present: dict[str, int] = field(default_factory=dict)
     unknown_pdls: list[str] = field(default_factory=list)
@@ -109,6 +121,22 @@ def _engine_url(url: str) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"cache.db V1 introuvable : {path}")
     return f"sqlite+aiosqlite:///file:{path}?mode=ro&uri=true"
+
+
+def _missing_columns(sync_conn: Any) -> list[str]:
+    """Tables (`production_detail`) et colonnes (`consumption_daily.fail_count`) de `V1_COLUMNS` absentes
+    de la base V1. L'inspecteur SQLAlchemy lit le schéma sous SQLite comme sous PostgreSQL ; les colonnes
+    en plus (measure_type, name…) ne sont pas lues, donc jamais un motif de refus."""
+    inspector = inspect(sync_conn)
+    tables = set(inspector.get_table_names())
+    missing = []
+    for table, columns in V1_COLUMNS.items():
+        if table not in tables:
+            missing.append(table)
+            continue
+        present = {column["name"] for column in inspector.get_columns(table)}
+        missing.extend(f"{table}.{column}" for column in columns if column not in present)
+    return missing
 
 
 def _as_datetime(value: Any) -> datetime:
@@ -230,16 +258,19 @@ async def load_v1(url: str, pdls: list[str] | None = None, *, today: date | None
                 revision = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
             except DBAPIError as e:
                 raise V1SchemaError(f"Pas une base myelectricaldata_import (table alembic_version absente) : {e}") from e
-            if revision != V1_ALEMBIC_HEAD:
+            if revision is None:
+                raise V1SchemaError("Pas une base myelectricaldata_import (table alembic_version vide, jamais migrée)")
+            missing = await conn.run_sync(_missing_columns)
+            if missing:
                 raise V1SchemaError(
-                    f"Révision V1 {revision} non prise en charge (attendu {V1_ALEMBIC_HEAD}, client V1 0.x à jour) : "
-                    "démarrez une dernière fois la V1 à jour pour migrer son cache.db"
+                    f"Base V1 en révision {revision} incompatible avec l'import, il y manque : {', '.join(missing)}. "
+                    f"Démarrez une dernière fois le client V1 0.x à jour (révision {V1_ALEMBIC_HEAD}) pour migrer son cache.db"
                 )
 
             usage_points = [r[0] for r in await conn.execute(text("SELECT usage_point_id FROM usage_points ORDER BY 1"))]
             if pdls is not None:
                 usage_points = [p for p in usage_points if p in set(pdls)]
-            records = V1Records(usage_points=usage_points)
+            records = V1Records(revision=revision, usage_points=usage_points)
             if not usage_points:
                 return records
 
@@ -353,6 +384,7 @@ async def run_import(
     )).scalars())
     report = ImportReport(
         dry_run=dry_run,
+        v1_revision=records.revision,
         unknown_pdls=[p for p in records.usage_points if p not in known],
         skipped=records.skipped,
     )

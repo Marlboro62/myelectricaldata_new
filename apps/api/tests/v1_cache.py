@@ -61,8 +61,11 @@ def _id(usage_point_id: str, when: datetime) -> str:
 class V1Cache:
     """Écrit des lignes comme le client V1 (id = md5 du PDL et de la date)."""
 
-    def __init__(self, path: Path, revision: str | None = V1_HEAD):
+    def __init__(self, path: Path, revision: str | None = V1_HEAD, missing: tuple[str, ...] = ()):
+        """`missing` retire du schéma, à la fermeture, une table (`production_detail`) ou une colonne
+        (`consumption_daily.fail_count`), comme une V1 forkée ou plus ancienne qui ne les aurait pas."""
         self.path = path
+        self.missing = missing
         self.conn = sqlite3.connect(path)
         for statement in SCHEMA:
             self.conn.execute(statement)
@@ -116,6 +119,9 @@ class V1Cache:
         return self
 
     def close(self) -> Path:
+        for item in self.missing:
+            table, _, column = item.partition(".")
+            self.conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}" if column else f"DROP TABLE {table}")
         self.conn.commit()
         self.conn.close()
         return self.path

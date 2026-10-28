@@ -33,7 +33,7 @@ from src.models.client_mode import (
     SyncStatus,
     SyncStatusType,
 )
-from src.services.import_v1 import SOURCE, run_import, to_source_url
+from src.services.import_v1 import SOURCE, V1SchemaError, run_import, to_source_url
 from src.services.local_data import LocalDataService
 from tests.v1_cache import SCHEMA, V1Cache
 
@@ -312,6 +312,93 @@ async def test_commande_fichier_absent(cli, tmp_path, capsys):
 async def test_commande_base_non_prise_en_charge(cli, capsys):
     assert await cli.main(["mysql://med@db/med"]) == 2
     assert "non prise en charge" in capsys.readouterr().err
+
+
+def _v1_revision_inconnue(tmp_path, *, missing: tuple[str, ...] = ()) -> str:
+    """Le `v1` ci-dessus, mais en révision d4f21c9a8b6e (image V1 non publiée, issue #164)."""
+    return str(
+        V1Cache(tmp_path / "cache.db", revision="d4f21c9a8b6e", missing=missing)
+        .usage_point(PDL)
+        .daily(PDL, date(2020, 1, 5), 12000)
+        .detail_day(PDL, date(2020, 1, 5))
+        .close()
+    )
+
+
+async def test_bilan_porte_la_revision_v1(session, v1):
+    report = await run_import(to_source_url(v1), session)
+
+    assert report.v1_revision == "e990284249e4"
+
+
+async def test_import_d_une_revision_v1_inconnue(session, tmp_path):
+    report = await run_import(to_source_url(_v1_revision_inconnue(tmp_path)), session)
+
+    assert report.v1_revision == "d4f21c9a8b6e"
+    assert report.inserted["consumption_data"] == 1 + 48
+    assert await _count(session, ConsumptionData) == 1 + 48
+
+
+async def test_revision_inconnue_et_colonne_manquante_n_ecrit_rien(session, tmp_path):
+    path = _v1_revision_inconnue(tmp_path, missing=("consumption_detail.interval",))
+
+    with pytest.raises(V1SchemaError, match=r"consumption_detail\.interval"):
+        await run_import(to_source_url(path), session)
+    assert await _count(session, ConsumptionData) == 0
+
+
+async def test_source_v1_postgresql_revision_inconnue(session, v1_postgres):
+    """Le contrôle de schéma passe aussi par PostgreSQL (inspecteur SQLAlchemy, pas seulement PRAGMA SQLite)."""
+    engine = create_async_engine(to_source_url(v1_postgres))
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE alembic_version SET version_num = 'd4f21c9a8b6e'"))
+    await engine.dispose()
+
+    report = await run_import(to_source_url(v1_postgres), session)
+
+    assert report.v1_revision == "d4f21c9a8b6e"
+    assert report.inserted == {"consumption_data": 50, "production_data": 1, "max_power_data": 1}
+
+
+async def test_source_v1_postgresql_colonne_manquante(session, v1_postgres):
+    engine = create_async_engine(to_source_url(v1_postgres))
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE alembic_version SET version_num = 'd4f21c9a8b6e'"))
+        await conn.execute(text("ALTER TABLE consumption_daily DROP COLUMN fail_count"))
+        await conn.execute(text("DROP TABLE production_detail"))
+    await engine.dispose()
+
+    with pytest.raises(V1SchemaError) as erreur:
+        await run_import(to_source_url(v1_postgres), session)
+    assert "consumption_daily.fail_count" in str(erreur.value)
+    assert "production_detail" in str(erreur.value)
+
+
+async def test_commande_revision_de_tete_sans_avertissement(cli, v1, capsys):
+    assert await cli.main([v1, "--dry-run"]) == 0
+    assert "Avertissement" not in capsys.readouterr().out
+
+
+async def test_commande_revision_inconnue_avertit_mais_importe(cli, session, tmp_path, capsys):
+    path = _v1_revision_inconnue(tmp_path)
+
+    assert await cli.main([path, "--dry-run"]) == 0
+    sortie = capsys.readouterr().out
+    assert "Avertissement" in sortie
+    assert "d4f21c9a8b6e" in sortie
+    assert "e990284249e4" in sortie
+    assert await _count(session, ConsumptionData) == 0
+
+    assert await cli.main([path]) == 0
+    assert "d4f21c9a8b6e" in capsys.readouterr().out
+    assert await _count(session, ConsumptionData) == 1 + 48
+
+
+async def test_commande_colonne_manquante(cli, tmp_path, capsys):
+    path = _v1_revision_inconnue(tmp_path, missing=("consumption_daily.fail_count",))
+
+    assert await cli.main([path]) == 1
+    assert "consumption_daily.fail_count" in capsys.readouterr().err
 
 
 async def test_gros_volume_par_lots(session, tmp_path):
