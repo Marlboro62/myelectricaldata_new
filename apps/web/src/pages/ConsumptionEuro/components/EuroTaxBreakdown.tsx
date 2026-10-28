@@ -5,10 +5,15 @@ import type { YearlyCost } from '../types/euro.types'
 
 interface EuroTaxBreakdownProps {
   year: YearlyCost
+  /** Mois (AAAA-MM) du prix de l'offre : les taux de ce mois s'appliquent à toute la période */
+  priceMonth?: string
 }
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+
+const formatMonth = (month: string): string =>
+  new Date(`${month}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 
 const formatPercent = (value: number): string =>
   new Intl.NumberFormat('fr-FR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)
@@ -17,8 +22,8 @@ const formatPercent = (value: number): string =>
  * Détail des taxes de la période : ce que contient le total TTC (énergie HT, accise, abonnement HT, TVA).
  * Les montants sont déduits des prix TTC de l'offre ; le total est identique à celui du tableau mensuel.
  */
-export function EuroTaxBreakdown({ year }: EuroTaxBreakdownProps) {
-  const t = useMemo(() => sumTaxBreakdown(year.months), [year.months])
+export function EuroTaxBreakdown({ year, priceMonth }: EuroTaxBreakdownProps) {
+  const t = useMemo(() => sumTaxBreakdown(year.months, priceMonth), [year.months, priceMonth])
 
   if (t.totalTTC <= 0) return null
 
@@ -104,7 +109,11 @@ export function EuroTaxBreakdown({ year }: EuroTaxBreakdownProps) {
 
       <p className="text-xs text-gray-500 dark:text-gray-400">
         Les prix des offres étant TTC, ces montants sont <strong>déjà inclus</strong> dans le total : ils ne s'y ajoutent pas.
-        Accise au tarif légal en vigueur chaque mois (particuliers), TVA à 20 % (5,5 % sur l'abonnement avant le 1er août 2025).
+        {' '}
+        {priceMonth
+          ? <>Accise et TVA aux taux en vigueur à la date des prix de l'offre ({formatMonth(priceMonth)}), appliqués à toute la période comme ces prix (particuliers).</>
+          : <>Accise au tarif légal en vigueur chaque mois (particuliers), TVA à 20 % (5,5 % sur l'abonnement avant le 1er août 2025).</>}
+        {' '}
         La CTA, calculée par le fournisseur sur la part acheminement de l'abonnement, reste comprise dans l'abonnement HT.
       </p>
     </div>

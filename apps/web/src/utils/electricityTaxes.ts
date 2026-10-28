@@ -3,9 +3,11 @@
  *
  * Les prix des offres sont saisis TTC : la page Consommation (€) calcule donc déjà le bon total.
  * Ce module retrouve, mois par mois, ce que ce total contient :
- * - l'accise sur l'électricité (ex-TICFE / CSPE) : kWh consommés × tarif légal en vigueur ce mois-là ;
+ * - l'accise sur l'électricité (ex-TICFE / CSPE) : kWh consommés × tarif légal en vigueur ;
  * - la TVA : 20 % sur la consommation, et sur l'abonnement 5,5 % avant le 1er août 2025 puis 20 % ;
  * - le reste : énergie HT (fourniture et acheminement) et abonnement HT.
+ *
+ * Les taux sont ceux de la date du prix de l'offre (`offerPriceMonth`) quand elle est connue, sinon ceux du mois.
  *
  * La CTA (contribution tarifaire d'acheminement) est calculée par le fournisseur sur la part fixe
  * du TURPE, qui ne figure pas dans les données des offres : elle reste comprise dans l'abonnement HT.
@@ -75,11 +77,28 @@ const EMPTY: TaxBreakdown = {
   energyHT: 0, accise: 0, subscriptionHT: 0, vatConsumption: 0, vatSubscription: 0, vat: 0, totalTTC: 0, kwh: 0,
 }
 
-/** Détail des taxes d'un mois, à partir des montants TTC calculés par la page. */
-export function monthTaxBreakdown({ month, totalKwh, consumptionCost, subscriptionCost }: TaxInput): TaxBreakdown {
+/**
+ * Mois (AAAA-MM) des prix de l'offre : date de mise en service, à défaut date de mise à jour des tarifs.
+ *
+ * La page applique ce prix TTC à tous les mois, même anciens : il contient l'accise et la TVA d'abonnement
+ * en vigueur à cette date, et c'est elles qu'il faut retirer pour retrouver les parts du total.
+ */
+export function offerPriceMonth(offer?: { valid_from?: string; price_updated_at?: string } | null): string | undefined {
+  const date = offer?.valid_from || offer?.price_updated_at
+  return date ? date.slice(0, 7) : undefined
+}
+
+/**
+ * Détail des taxes d'un mois, à partir des montants TTC calculés par la page.
+ * `rateMonth` fixe le mois des taux (celui du prix de l'offre) ; par défaut, le mois consommé.
+ */
+export function monthTaxBreakdown(
+  { month, totalKwh, consumptionCost, subscriptionCost }: TaxInput,
+  rateMonth: string = month,
+): TaxBreakdown {
   const consumptionHT = consumptionCost / (1 + VAT_CONSUMPTION)
-  const accise = totalKwh * acciseRate(month)
-  const subscriptionHT = subscriptionCost / (1 + subscriptionVatRate(month))
+  const accise = totalKwh * acciseRate(rateMonth)
+  const subscriptionHT = subscriptionCost / (1 + subscriptionVatRate(rateMonth))
   const vatConsumption = consumptionCost - consumptionHT
   const vatSubscription = subscriptionCost - subscriptionHT
   return {
@@ -94,9 +113,9 @@ export function monthTaxBreakdown({ month, totalKwh, consumptionCost, subscripti
   }
 }
 
-/** Somme du détail des taxes sur plusieurs mois. */
-export function sumTaxBreakdown(months: TaxInput[]): TaxBreakdown {
-  return months.map(monthTaxBreakdown).reduce(
+/** Somme du détail des taxes sur plusieurs mois, aux taux de `rateMonth` s'il est donné. */
+export function sumTaxBreakdown(months: TaxInput[], rateMonth?: string): TaxBreakdown {
+  return months.map((m) => monthTaxBreakdown(m, rateMonth)).reduce(
     (acc, m) => ({
       energyHT: acc.energyHT + m.energyHT,
       accise: acc.accise + m.accise,

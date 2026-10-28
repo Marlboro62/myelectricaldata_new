@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { acciseRate, subscriptionVatRate, monthTaxBreakdown, sumTaxBreakdown } from '../electricityTaxes'
+import { acciseRate, subscriptionVatRate, monthTaxBreakdown, sumTaxBreakdown, offerPriceMonth } from '../electricityTaxes'
 
 describe('acciseRate', () => {
   it('suit les dates d\'effet légales (ménages)', () => {
@@ -63,5 +63,36 @@ describe('sumTaxBreakdown', () => {
 
   it('renvoie des zéros sans mois', () => {
     expect(sumTaxBreakdown([]).totalTTC).toBe(0)
+  })
+})
+
+describe('taux calés sur la date du prix de l\'offre', () => {
+  it('offerPriceMonth prend valid_from, puis price_updated_at, sinon rien', () => {
+    expect(offerPriceMonth({ valid_from: '2026-08-01T00:00:00Z', price_updated_at: '2026-09-15' })).toBe('2026-08')
+    expect(offerPriceMonth({ price_updated_at: '2025-02-03T10:00:00' })).toBe('2025-02')
+    expect(offerPriceMonth({})).toBeUndefined()
+    expect(offerPriceMonth(null)).toBeUndefined()
+  })
+
+  it('un mois de 2023 au prix d\'août 2026 retire l\'accise et la TVA d\'abonnement de 2026', () => {
+    const b = monthTaxBreakdown({ month: '2023-05', totalKwh: 1000, consumptionCost: 195.2, subscriptionCost: 18 }, '2026-08')
+    expect(b.accise).toBeCloseTo(30.62, 9)
+    expect(b.subscriptionHT).toBeCloseTo(15, 9)
+    expect(b.energyHT + b.accise + b.subscriptionHT + b.vat).toBeCloseTo(b.totalTTC, 9)
+  })
+
+  it('sumTaxBreakdown applique le mois du prix à tous les mois', () => {
+    const months = [
+      { month: '2023-05', totalKwh: 1000, consumptionCost: 195.2, subscriptionCost: 18 },
+      { month: '2026-09', totalKwh: 1000, consumptionCost: 195.2, subscriptionCost: 18 },
+    ]
+    const t = sumTaxBreakdown(months, '2026-08')
+    expect(t.accise).toBeCloseTo(61.24, 9)
+    expect(t.subscriptionHT).toBeCloseTo(30, 9)
+  })
+
+  it('sans mois de prix, chaque mois garde son propre taux', () => {
+    const b = monthTaxBreakdown({ month: '2023-05', totalKwh: 1000, consumptionCost: 195.2, subscriptionCost: 18 })
+    expect(b.accise).toBeCloseTo(1, 9)
   })
 })

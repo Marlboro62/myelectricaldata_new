@@ -185,11 +185,20 @@ Le bloc `EuroTaxBreakdown` retrouve, mois par mois, ce que contient le total TTC
 
 ```typescript
 consommationHT = consommationTTC / 1.2
-accise = kWh * acciseRate(mois)          // tarif légal « ménages » en vigueur ce mois-là
+moisTaux = offerPriceMonth(offre) ?? mois  // valid_from, à défaut price_updated_at de l'offre
+accise = kWh * acciseRate(moisTaux)      // tarif légal « ménages » en vigueur à cette date
 energieHT = consommationHT - accise      // fourniture et acheminement
-abonnementHT = abonnementTTC / (1 + subscriptionVatRate(mois))  // 5,5 % avant 2025-08, 20 % ensuite
+abonnementHT = abonnementTTC / (1 + subscriptionVatRate(moisTaux))  // 5,5 % avant 2025-08, 20 % ensuite
 TVA = (consommationTTC - consommationHT) + (abonnementTTC - abonnementHT)
 ```
+
+Les taux suivent la date des prix de l'offre, pas le mois consommé : la page applique le prix actuel de l'offre
+à toute la période, et ce prix TTC contient l'accise et la TVA d'abonnement de sa date. Retirer le taux d'un mois
+ancien (1 €/MWh en 2023, TVA d'abonnement à 5,5 % avant août 2025) gonflerait l'énergie HT et l'abonnement HT.
+Sans date connue sur l'offre, chaque mois garde son propre taux.
+
+L'énergie HT peut être négative si le prix TTC de l'offre est inférieur à l'accise TTC (heures gratuites) :
+elle s'affiche telle quelle pour que les lignes redonnent le total, seule la barre de répartition est bornée à 0.
 
 Tarifs d'accise (€/kWh HT) : 0,0225 (2016), 0,001 (février 2022), 0,021 (février 2024), 0,0337 (février 2025),
 0,02998 (août 2025), 0,03085 (février 2026), 0,03062 (août 2026). Les taux suivants s'ajoutent dans `ACCISE_RATES`.

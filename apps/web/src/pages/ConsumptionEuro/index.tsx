@@ -478,6 +478,7 @@ export default function ConsumptionEuro() {
               <EuroMonthlyBreakdown
                 yearlyCosts={yearlyCosts}
                 isDarkMode={isDarkMode}
+                selectedOffer={displayOffer}
               />
             </div>
           )}
