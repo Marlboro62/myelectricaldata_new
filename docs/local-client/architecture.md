@@ -139,9 +139,27 @@ class MyElectricalDataAdapter:
         """Envoie une contribution"""
 ```
 
+### Conteneurs
+
+Avec Docker Compose, le client tourne au choix :
+
+- **en un conteneur** (`docker-compose.client.yml`, image `client`, recommandé) : tini (PID 1) lance
+  un superviseur qui démarre l'API (migrations Alembic puis uvicorn sur `127.0.0.1:8000`, jamais
+  exposé) et nginx sur le port 80. nginx sert le front et transmet `/api` tel quel à l'API (qui a
+  `root_path="/api"`), sans mise en tampon pour l'export en SSE. Si l'un des deux processus
+  s'arrête, le superviseur arrête l'autre et le conteneur sort en erreur : Docker le relance
+  (`restart: unless-stopped`) au lieu de laisser nginx répondre 502. Le `HEALTHCHECK` de l'image
+  interroge nginx puis `/ping` de l'API sur la boucle locale (pas `/api/ping` : avec `ALLOWED_HOSTS`
+  renseigné, la sonde, qui se présente en `127.0.0.1`, serait refusée) ;
+- **en deux conteneurs** (`docker-compose.sqlite.yml`, `docker-compose.yml`, images `frontend` et
+  `backend`) : le nginx du frontend transmet `/api` au service `backend` (`API_PROXY_URL`).
+
+Les deux images nginx partagent `apps/web/runtime-config.sh`, qui écrit `env.js` et le proxy `/api`
+au démarrage. Le chart Helm garde deux pods (`frontend`, `backend`), l'ingress routant `/api`.
+
 ### Base de données locale
 
-Le client tourne sur **SQLite** (un fichier, `docker-compose.sqlite.yml` ou chart sans PostgreSQL) ou
+Le client tourne sur **SQLite** (un fichier, `docker-compose.client.yml`, `docker-compose.sqlite.yml` ou chart sans PostgreSQL) ou
 sur **PostgreSQL** ; la passerelle (mode serveur) reste sur PostgreSQL. Le même code sert les deux
 bases :
 

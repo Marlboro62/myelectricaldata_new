@@ -12,7 +12,7 @@ l'historique** déjà téléchargé.
 | Configuration | `/data/config.yaml` | fichier `.env` et interface web |
 | Stockage | SQLite `/data/cache.db` (ou PostgreSQL via `storage_uri`) | SQLite `/app/data/myelectricaldata.db` (recommandé) ou PostgreSQL 16 |
 | Compte | compte et token de l'ancienne passerelle | compte sur [www.v2.myelectricaldata.fr](https://www.v2.myelectricaldata.fr), identifiants `MED_CLIENT_ID` / `MED_CLIENT_SECRET` |
-| Interface | port 5000 | ports 8100 (interface) et 8181 (API) |
+| Interface | port 5000 | port 8100 (interface, API sous `/api`) ; 8181 pour l'API en deux conteneurs |
 
 La V2 s'appuie sur une **nouvelle passerelle** : votre compte et votre token V1 ne sont pas repris,
 il faut créer un compte V2 et y redonner le consentement Enedis.
@@ -90,7 +90,7 @@ L'import ouvre le `cache.db` en lecture seule : il ne le modifie jamais.
 
 Installez le client local V2 avec [Docker](./installation/docker.md) ou
 [Helm](./installation/helm.md), en renseignant `MED_CLIENT_ID` et `MED_CLIENT_SECRET`. Les ports par
-défaut (8100 et 8181) ne croisent pas celui de la V1 (5000) : les deux peuvent coexister le temps de
+défaut (8100, et 8181 en deux conteneurs) ne croisent pas celui de la V1 (5000) : les deux peuvent coexister le temps de
 la migration.
 
 Ouvrez l'interface (http://localhost:8100) et attendez que vos PDL apparaissent : le client les
@@ -104,27 +104,28 @@ données venues d'Enedis sont conservées et l'import ne comble que les trous.
 
 ## Étape 3 : importer l'historique V1
 
-La commande `scripts/import_v1.py` est incluse dans l'image du backend. Elle lit le `cache.db` V1 et
+La commande `scripts/import_v1.py` est incluse dans les images client et backend. Elle lit le `cache.db` V1 et
 écrit dans la base de la V2, SQLite ou PostgreSQL 15 ou plus (le compose et le chart Helm
 fournissent PostgreSQL 16 ; seule une base externe plus ancienne est refusée).
 
 ### Avec Docker Compose
 
-Depuis le dossier de la V2. Les exemples visent `docker-compose.sqlite.yml` ; avec PostgreSQL,
-remplacez-le par `docker-compose.yml`.
+Depuis le dossier de la V2. Les exemples visent `docker-compose.client.yml` et son service `client` ; en deux
+conteneurs, remplacez-le par `docker-compose.sqlite.yml` (ou `docker-compose.yml` avec PostgreSQL) et
+le service par `backend`.
 
 ```bash
-# 1. Copier le cache.db V1 dans le conteneur backend
-docker compose -f docker-compose.sqlite.yml cp /chemin/vers/myelectricaldata_v1/data/cache.db backend:/tmp/cache.db
+# 1. Copier le cache.db V1 dans le conteneur
+docker compose -f docker-compose.client.yml cp /chemin/vers/myelectricaldata_v1/data/cache.db client:/tmp/cache.db
 
 # 2. Simulation : compte ce qui serait importé, sans rien écrire
-docker compose -f docker-compose.sqlite.yml exec backend python scripts/import_v1.py /tmp/cache.db --dry-run
+docker compose -f docker-compose.client.yml exec client python scripts/import_v1.py /tmp/cache.db --dry-run
 
 # 3. Import réel
-docker compose -f docker-compose.sqlite.yml exec backend python scripts/import_v1.py /tmp/cache.db
+docker compose -f docker-compose.client.yml exec client python scripts/import_v1.py /tmp/cache.db
 
 # 4. Supprimer la copie (le cache.db contient aussi les anciens tokens V1)
-docker compose -f docker-compose.sqlite.yml exec backend rm /tmp/cache.db
+docker compose -f docker-compose.client.yml exec client rm /tmp/cache.db
 ```
 
 Exemple de sortie :
@@ -174,7 +175,7 @@ Si votre `config.yaml` V1 contenait une clé `storage_uri` en `postgresql://…`
 place du chemin du `cache.db` :
 
 ```bash
-docker compose -f docker-compose.sqlite.yml exec backend \
+docker compose -f docker-compose.client.yml exec client \
   python scripts/import_v1.py "postgresql://user:motdepasse@hote:5432/myelectricaldata" --dry-run
 ```
 
@@ -272,7 +273,7 @@ Oui. Les lignes déjà présentes sont comptées en « déjà présentes » et l
 Les lignes importées portent la source `myelectricaldata_v1`. Pour les retirer, en SQLite :
 
 ```bash
-docker compose -f docker-compose.sqlite.yml exec backend python -c "
+docker compose -f docker-compose.client.yml exec client python -c "
 import sqlite3
 db = sqlite3.connect('/app/data/myelectricaldata.db', timeout=30)
 for table in ('consumption_data', 'production_data', 'max_power_data'):

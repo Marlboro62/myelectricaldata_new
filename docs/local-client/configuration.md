@@ -31,10 +31,12 @@ MED_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ### Réseau et ports
 
 ```bash
-# Port du frontend (défaut: 8100)
-CLIENT_FRONTEND_PORT=8100
+# Port de l'interface et de l'API (/api), docker-compose.client.yml (défaut: 8100)
+CLIENT_PORT=8100
 
-# Port du backend API (défaut: 8181)
+# Deux conteneurs (docker-compose.sqlite.yml, docker-compose.yml) :
+# port du frontend (défaut: 8100) et du backend API (défaut: 8181)
+CLIENT_FRONTEND_PORT=8100
 CLIENT_BACKEND_PORT=8181
 
 # Port PostgreSQL interne, docker-compose.yml seulement (défaut: 5433)
@@ -54,7 +56,8 @@ Le backend lit `DATABASE_URL`, que chaque fichier compose fixe :
 
 | Compose | `DATABASE_URL` |
 |---------|----------------|
-| `docker-compose.sqlite.yml` (recommandé) | `sqlite+aiosqlite:////app/data/myelectricaldata.db` (fichier dans le volume `myelectricaldata_data`) |
+| `docker-compose.client.yml` (recommandé) | `sqlite+aiosqlite:////app/data/myelectricaldata.db` (fichier dans le volume `myelectricaldata_data`) ; `DATABASE_URL` de `.env` à la place si elle est renseignée (PostgreSQL externe) |
+| `docker-compose.sqlite.yml` | `sqlite+aiosqlite:////app/data/myelectricaldata.db` (même volume) |
 | `docker-compose.yml` | `postgresql+asyncpg://…@postgres:5432/…`, construite depuis les variables ci-dessous |
 
 En SQLite, aucune variable de base n'est à renseigner. Le backend crée le fichier et son schéma au
@@ -211,8 +214,7 @@ MED_CLIENT_ID=cli_abc123def456ghi789
 MED_CLIENT_SECRET=jkl012mno345pqr678stu901vwx234yz
 
 # === RÉSEAU ===
-CLIENT_FRONTEND_PORT=8100
-CLIENT_BACKEND_PORT=8181
+CLIENT_PORT=8100
 TZ=Europe/Paris
 
 # === SCHEDULER ===
@@ -323,10 +325,11 @@ asyncio.run(test())
 
 ## Rechargement de la configuration
 
-Après modification de `.env`, recréer le backend (`restart` ne relit pas le fichier) :
+Après modification de `.env`, recréer le conteneur (`restart` ne relit pas le fichier) :
 
 ```bash
-docker compose -f docker-compose.yml up -d backend
+docker compose -f docker-compose.client.yml up -d
+# deux conteneurs : docker compose -f docker-compose.yml up -d backend
 ```
 
 Les modifications de configuration via l'interface web sont prises en compte immédiatement, sans redémarrage.

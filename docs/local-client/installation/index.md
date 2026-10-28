@@ -47,8 +47,8 @@ cd myelectricaldata_new
 cp .env.local-client.example .env
 nano .env  # Renseigner MED_CLIENT_ID et MED_CLIENT_SECRET
 
-# Démarrer (base SQLite ; docker-compose.yml pour PostgreSQL)
-docker compose -f docker-compose.sqlite.yml up -d
+# Démarrer (un seul conteneur, base SQLite)
+docker compose -f docker-compose.client.yml up -d
 
 # Accéder
 open http://localhost:8100
@@ -81,6 +81,7 @@ helm install myelectricaldata ./myelectricaldata-client \
 
 | Service | Port |
 |---------|------|
-| Frontend | 8100 |
-| Backend API | 8181 |
+| Interface et API (`docker-compose.client.yml`, API sous `/api`) | 8100 |
+| Frontend (deux conteneurs : `docker-compose.sqlite.yml`, `docker-compose.yml`) | 8100 |
+| Backend API (deux conteneurs seulement) | 8181 |
 | PostgreSQL (`docker-compose.yml` seulement) | 5433 (interne) |

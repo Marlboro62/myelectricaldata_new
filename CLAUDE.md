@@ -19,6 +19,8 @@ MyElectricalData is a secure API gateway that enables French individuals to acce
 
 Les deux modes peuvent tourner en parallèle. Documentation mode client : `docs/local-client/`
 
+Installation client recommandée : `docker-compose.client.yml`, une seule image `client` (nginx + API dans un conteneur, port 8100 seul, voir `apps/client/`). `docker-compose.yml` et `docker-compose.sqlite.yml` (deux conteneurs, API sur 8181) restent pour les installations existantes. Test de fumée : `scripts/smoke-client-image.sh`.
+
 ## Development Commands
 
 ### Root Makefile (Recommended)

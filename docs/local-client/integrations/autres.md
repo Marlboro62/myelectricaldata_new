@@ -140,9 +140,12 @@ GET /api/ecowatt?date=2024-01-15
 
 ### Exemple avec curl
 
+L'API répond sous `/api` sur le port de l'interface (8100). En deux conteneurs
+(`docker-compose.sqlite.yml`, `docker-compose.yml`), elle répond aussi directement sur le port 8181.
+
 ```bash
 # Récupérer la consommation
-curl "http://localhost:8181/api/consumption/daily/12345678901234?start=2024-01-01&end=2024-01-31"
+curl "http://localhost:8100/api/consumption/daily/12345678901234?start=2024-01-01&end=2024-01-31"
 ```
 
 ### Exemple avec Python
@@ -152,7 +155,7 @@ import requests
 from datetime import date, timedelta
 
 # Configuration
-API_URL = "http://localhost:8181/api"
+API_URL = "http://localhost:8100/api"
 PDL = "12345678901234"
 
 # Récupérer la consommation du mois
@@ -179,7 +182,7 @@ Pour une export ponctuel vers CSV ou Excel :
 
 ```bash
 # Via API
-curl "http://localhost:8181/api/consumption/daily/12345678901234?start=2024-01-01&end=2024-12-31&format=csv" \
+curl "http://localhost:8100/api/consumption/daily/12345678901234?start=2024-01-01&end=2024-12-31&format=csv" \
   -o consumption_2024.csv
 ```
 

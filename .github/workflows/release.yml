@@ -144,13 +144,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [backend, frontend]
+        image: [backend, frontend, client]
         arch: [amd64, arm64]
         include:
           - image: backend
             context: ./apps/api
           - image: frontend
             context: ./apps/web
+          # Image client unique (front + API) : contextes nommés web et api, cf. apps/client/Dockerfile
+          - image: client
+            context: ./apps/client
+            build-contexts: |
+              web=./apps/web
+              api=./apps/api
           - arch: amd64
             runner: ubuntu-latest
           - arch: arm64
@@ -183,6 +189,7 @@ jobs:
         timeout-minutes: 30
         with:
           context: ${{ matrix.context }}
+          build-contexts: ${{ matrix.build-contexts }}
           platforms: linux/${{ matrix.arch }}
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
@@ -217,7 +224,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [backend, frontend]
+        image: [backend, frontend, client]
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -280,11 +287,13 @@ jobs:
           echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
           echo "| \`${{ env.IMAGE_PREFIX }}/backend\` | \`$VERSION\`, \`$EXTRA_TAG\` |" >> $GITHUB_STEP_SUMMARY
           echo "| \`${{ env.IMAGE_PREFIX }}/frontend\` | \`$VERSION\`, \`$EXTRA_TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ env.IMAGE_PREFIX }}/client\` | \`$VERSION\`, \`$EXTRA_TAG\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Pull Commands" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.IMAGE_PREFIX }}/backend:$VERSION" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.IMAGE_PREFIX }}/frontend:$VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.IMAGE_PREFIX }}/client:$VERSION" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================
