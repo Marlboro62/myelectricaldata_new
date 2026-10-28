@@ -167,4 +167,27 @@ describe('NewProviderForm : modérateur', () => {
     expect(message).toMatch(/droit|autoris|permission/i)
     expect(message).not.toBe('Erreur lors de la création du fournisseur')
   })
+
+  it('après un 403, bascule en proposition : demande la grille et envoie une contribution', async () => {
+    // Revue MED-80 : aucune permission `admin.offers.edit` n'est semée, un modérateur standard est donc
+    // isPrivilegedUser côté front mais refusé par POST /providers : il ne doit pas rester bloqué
+    droits.moderateur = true
+    vi.mocked(energyApi.createProvider).mockRejectedValue({ response: { status: 403, data: { detail: 'Forbidden' } } })
+    await ouvrirLeFormulaire()
+    const user = await remplir({ nom: 'Plenitude', site: SITE })
+    await user.click(screen.getByRole('button', { name: /créer/i }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+
+    await user.type(await screen.findByLabelText(/grille|fiche des prix/i), GRILLE)
+    await user.click(screen.getByRole('button', { name: /proposer/i }))
+
+    await waitFor(() => expect(energyApi.submitContribution).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(energyApi.submitContribution).mock.calls[0][0]).toMatchObject({
+      contribution_type: 'NEW_PROVIDER',
+      provider_name: 'Plenitude',
+      offer_name: '[NOUVEAU FOURNISSEUR] Plenitude',
+      price_sheet_url: GRILLE,
+    })
+    expect(energyApi.createProvider).toHaveBeenCalledTimes(1)
+  })
 })

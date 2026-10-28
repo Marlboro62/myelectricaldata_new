@@ -12,7 +12,7 @@ import { PROVIDER_ONLY_MARKER } from '../../utils/contribute.utils'
 
 const FORBIDDEN_MESSAGE =
   "Vous n'avez pas le droit de créer un fournisseur directement (permission de modification des offres). " +
-  'Proposez-le par une contribution, un modérateur la validera.'
+  'Le formulaire passe en proposition : indiquez le lien vers la grille tarifaire, un modérateur la validera.'
 
 interface NewProviderFormProps {
   state: AllOffersState
@@ -34,6 +34,9 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
     setFilterProvider,
   } = state
   const [priceSheetUrl, setPriceSheetUrl] = useState('')
+  // Un 403 sur la création directe fait passer le formulaire en proposition, comme pour un contributeur
+  const [directForbidden, setDirectForbidden] = useState(false)
+  const canCreateDirectly = isPrivilegedUser && !directForbidden
 
   const reset = () => {
     setIsAddingProvider(false)
@@ -73,7 +76,13 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
       }
     } catch (error) {
       // isPrivilegedUser (front) peut diverger du droit offers.edit (backend) : expliquer le refus
-      toast.error(httpStatus(error) === 403 ? FORBIDDEN_MESSAGE : 'Erreur lors de la création du fournisseur')
+      // et basculer en proposition plutôt que de laisser l'utilisateur bloqué
+      if (httpStatus(error) === 403) {
+        setDirectForbidden(true)
+        toast.error(FORBIDDEN_MESSAGE)
+      } else {
+        toast.error('Erreur lors de la création du fournisseur')
+      }
     }
     setCreatingProvider(false)
   }
@@ -112,7 +121,7 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
 
   if (!isAddingProvider) return null
 
-  const canSubmit = !creatingProvider && !!newProviderName.trim() && (isPrivilegedUser || !!priceSheetUrl.trim())
+  const canSubmit = !creatingProvider && !!newProviderName.trim() && (canCreateDirectly || !!priceSheetUrl.trim())
 
   return (
     <div className="p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg">
@@ -130,7 +139,7 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
         </button>
       </div>
 
-      {!isPrivilegedUser && (
+      {!canCreateDirectly && (
         <p className="text-sm text-green-800 dark:text-green-300 mb-4">
           Votre proposition sera vérifiée par un modérateur avant l'ajout du fournisseur. Vous pourrez ensuite y ajouter ses offres.
         </p>
@@ -164,7 +173,7 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
           />
         </div>
 
-        {!isPrivilegedUser && (
+        {!canCreateDirectly && (
           <div className="md:col-span-2">
             <label htmlFor="new-provider-price-sheet" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Lien vers la grille tarifaire <span className="text-red-500">*</span>
@@ -190,12 +199,12 @@ export default function NewProviderForm({ state }: NewProviderFormProps) {
           Annuler
         </button>
         <button
-          onClick={isPrivilegedUser ? handleCreate : handlePropose}
+          onClick={canCreateDirectly ? handleCreate : handlePropose}
           disabled={!canSubmit}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
         >
-          {isPrivilegedUser ? <Plus size={16} /> : <Send size={16} />}
-          {isPrivilegedUser
+          {canCreateDirectly ? <Plus size={16} /> : <Send size={16} />}
+          {canCreateDirectly
             ? (creatingProvider ? 'Création...' : 'Créer le fournisseur')
             : (creatingProvider ? 'Envoi...' : 'Proposer le fournisseur')}
         </button>
