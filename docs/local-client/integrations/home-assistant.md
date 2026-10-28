@@ -106,6 +106,11 @@ L'identifiant suggéré passe par `default_entity_id` (Home Assistant 2025.10 et
 | `sensor.myelectricaldata_linky_{pdl}_production` | kWh | Production de la veille, historique en attributs |
 | `sensor.myelectricaldata_linky_{pdl}_production_last{7,14,30}day` | kWh | Totaux de production |
 
+Les attributs annuels du capteur `consumption` suivent le vocabulaire de la carte content-card-linky :
+`current_year` (année civile en cours), `current_year_last_year` (même période l'an dernier),
+`yearly_evolution` (écart en %) et `last_year` (année civile précédente complète, du 1er janvier au
+31 décembre, en kWh).
+
 ### Heures pleines / heures creuses
 
 Pour un contrat à heures creuses, l'export publie en plus 8 capteurs (`kWh`, classe `energy`, `total`),
