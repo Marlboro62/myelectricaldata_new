@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.11.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.10.0...2.11.0) (2026-10-28)
+
+### Features
+
+* **docker:** MED-75 / docker-compose.client.yml a un seul service ([614d760](https://github.com/MyElectricalData/myelectricaldata_new/commit/614d760d39892cc2a9cc9f3d17d0ae74ea4319dc))
+* **docker:** MED-75 / image client unique, front et API dans un conteneur ([a38bd67](https://github.com/MyElectricalData/myelectricaldata_new/commit/a38bd67e21a0c7ac915e2dfc874a70e67eb362c4))
+
+### Bug Fixes
+
+* **docker:** MED-75 / sonde de l'image client insensible a ALLOWED_HOSTS ([ef054e3](https://github.com/MyElectricalData/myelectricaldata_new/commit/ef054e3649c5d1100bd41e71189ebd4598279a57))
+
+### Refactoring
+
+* **web:** MED-75 / env.js et proxy /api dans un script partage runtime-config.sh ([c6eedfa](https://github.com/MyElectricalData/myelectricaldata_new/commit/c6eedfa0dabede3d1b56869af2003c4a8ebc295c))
+
 ## [2.10.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.9.2...2.10.0) (2026-10-27)
 
 ### Features
