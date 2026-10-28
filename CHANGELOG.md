@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.12.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.11.0...2.12.0) (2026-10-28)
+
+### Features
+
+* **export:** attribut last_year de l'export content-card-linky ([621dbd0](https://github.com/MyElectricalData/myelectricaldata_new/commit/621dbd0b465e2d42fb905e3915291d986fa4de5e)), closes [Marlboro62/content-card-linky-new#2](https://github.com/Marlboro62/content-card-linky-new/issues/2)
+* **export:** noms des entités Home Assistant en français, option entity_language ([2de1c75](https://github.com/MyElectricalData/myelectricaldata_new/commit/2de1c75a545659b60c8d14ff48edb1a287296480))
+* **web:** détail des taxes comprises dans le coût (accise, TVA) ([de6e43a](https://github.com/MyElectricalData/myelectricaldata_new/commit/de6e43a0fc65bad9f322f0d743d8cdf82e46563f))
+
+### Bug Fixes
+
+* **api:** MED-79 / import V1 controle les colonnes lues au lieu de la revision Alembic ([2db43a8](https://github.com/MyElectricalData/myelectricaldata_new/commit/2db43a81ee823c0f007fec32b93eedbc0280faa1)), closes [#164](https://github.com/MyElectricalData/myelectricaldata_new/issues/164) [#164](https://github.com/MyElectricalData/myelectricaldata_new/issues/164)
+* **contribute:** MED-80 / bascule en proposition apres un 403 sur la creation directe ([2e70b7e](https://github.com/MyElectricalData/myelectricaldata_new/commit/2e70b7ec10dda06b2a089b6679b8137f0e1b4ab8))
+* **contribute:** MED-80 / contribution fournisseur seul et approbations alignees ([328927b](https://github.com/MyElectricalData/myelectricaldata_new/commit/328927bcb124a37a1b750d34a6349b8a605e802a))
+* **contribute:** MED-80 / proposer un fournisseur par contribution ([0eb8489](https://github.com/MyElectricalData/myelectricaldata_new/commit/0eb84899340ab7fa12716e0b2811ae5b1633554c))
+* **export:** année précédente à date jusqu'au même jour, pas au 28 ([f6c7cd6](https://github.com/MyElectricalData/myelectricaldata_new/commit/f6c7cd636c797c1e14fcae5116ef23b759fad1fa))
+
 ## [2.11.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.10.0...2.11.0) (2026-10-28)
 
 ### Features
