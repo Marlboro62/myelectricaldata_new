@@ -317,7 +317,7 @@ const [priceSheetUrl, setPriceSheetUrl] = useState("");
 // Creation nouveau fournisseur (formulaire inline)
 const [isAddingProvider, setIsAddingProvider] = useState(false);
 const [newProviderName, setNewProviderName] = useState("");
-const [newProviderOfferType, setNewProviderOfferType] = useState("");
+const [newProviderWebsite, setNewProviderWebsite] = useState("");
 
 // Fournisseurs a supprimer
 const [providersToRemove, setProvidersToRemove] = useState<string[]>([]);
@@ -364,41 +364,33 @@ const groupNames = useMemo(() => {
 
 ### Creation d'un nouveau fournisseur (FAIT)
 
-Permet de proposer l'ajout d'un nouveau fournisseur d'energie directement depuis l'onglet "Toutes les offres".
+Permet d'ajouter un nouveau fournisseur d'energie directement depuis l'onglet "Toutes les offres" (issue #162).
 
 **Fonctionnement :**
 
 - Bouton `+` pleine largeur en bas de la liste des fournisseurs (visible uniquement en mode edition)
 - Style bordure pointillee pour indiquer une action d'ajout
 - Clic transforme le bouton en formulaire inline (pas de modal)
+- Le fournisseur est cree SANS offre : ses offres s'ajoutent ensuite par les contributions habituelles
 
-**Formulaire inline :**
+**Deux parcours selon le droit :**
 
-1. Champ texte pour le nom du fournisseur (obligatoire)
-2. Dropdown pour selectionner le type d'offre parmi tous les types existants
-3. Section d'ajout de puissances (meme interface que l'ajout pour fournisseurs existants)
-4. Bouton X pour annuler et revenir au bouton `+`
+| Utilisateur | Champs | Action |
+| --- | --- | --- |
+| Moderateur / admin (`isPrivilegedUser`) | Nom (obligatoire), site web | Creation directe : `POST /energy/providers` (droit `offers.edit`) |
+| Contributeur | Nom (obligatoire), site web, lien vers la grille tarifaire (obligatoire) | Contribution `NEW_PROVIDER` « fournisseur seul », validee par un moderateur |
 
-**Comportement :**
+- Un 403 sur la creation directe (le front peut diverger du droit `offers.edit` du backend, cf. MED-36) affiche un message explicite et bascule le formulaire en mode proposition
+- Avant l'issue #162, le contributeur appelait `POST /energy/providers`, reserve a `offers.edit` : message generique « Erreur lors de la creation du fournisseur »
 
-- Quand on clique sur `+`, toutes les puissances existantes se vident
-- On peut ajouter une ou plusieurs puissances avec leurs tarifs
-- Les types d'offres disponibles sont extraits de toutes les offres existantes
+**Contribution « fournisseur seul » :**
 
-**UI :**
-
-- Bouton : `border-dashed border-primary-300` avec icone `Plus`, pleine largeur
-- Formulaire : fond vert clair `bg-green-50 dark:bg-green-900/20`
-- Champ nom : bordure verte `border-green-300`
-- Dropdown type : meme style que les autres selects
-
-**Soumission :**
-
-- Type de contribution : `NEW_PROVIDER`
-- Inclut le nom du fournisseur, type d'offre, et variantes de puissance
-- Invalide les caches `my-contributions` et `energy-providers`
-- Toast de succes/erreur
-- Reset du formulaire apres succes
+- `contribution_type` : `NEW_PROVIDER`, avec `provider_name` et `provider_website`
+- Marqueur : `offer_name` = `[NOUVEAU FOURNISSEUR] <nom>` (constante `PROVIDER_ONLY_MARKER`, front `contribute.utils.ts` et backend `energy_offers.py`), `offer_type` = `BASE`, aucune puissance ni tarif ; `valid_from` = date du jour (exige par le type, sans objet)
+- Le marqueur reste lisible dans Admin Contributions (libelle « Nouveau fournisseur seul », sans type ni bloc tarifs), Mes contributions, les emails et Slack
+- Soumission (`/contribute` et `/contribute/batch`) : `PROVIDER_EXISTS` si le nom existe deja (insensible a la casse), `MISSING_FIELD` sans lien de grille
+- Approbation unitaire (`apply_contribution_changes`) ET en lot (`bulk-approve`) passent par `resolve_new_provider` : le fournisseur est cree, ou reutilise s'il porte deja ce nom (contrainte `unique` sur `name`), et AUCUNE offre n'est creee
+- Invalide les caches `my-contributions` et `energy-providers`, toast « il apparaitra apres validation par un moderateur »
 
 ### Suppression de fournisseur (FAIT)
 
