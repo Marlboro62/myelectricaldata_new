@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.1](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.12.0...2.12.1) (2026-10-28)
+
+### Bug Fixes
+
+* **export:** MED-83 / declarer entity_language dans le schema Home Assistant ([b64c4be](https://github.com/MyElectricalData/myelectricaldata_new/commit/b64c4be7bac17fd775c113d6269ef179643010b9)), closes [#172](https://github.com/MyElectricalData/myelectricaldata_new/issues/172)
+* **web:** MED-82 / taux de taxes à la date du prix de l'offre ([23495dd](https://github.com/MyElectricalData/myelectricaldata_new/commit/23495ddf63d2e5a112415c5ef38e8129ef1dbfbd)), closes [#176](https://github.com/MyElectricalData/myelectricaldata_new/issues/176)
+
 ## [2.12.0](https://github.com/MyElectricalData/myelectricaldata_new/compare/2.11.0...2.12.0) (2026-10-28)
 
 ### Features
