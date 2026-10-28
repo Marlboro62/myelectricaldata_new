@@ -7,7 +7,7 @@ Only available when CLIENT_MODE is enabled.
 import asyncio
 import json
 import logging
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -50,6 +50,10 @@ class HomeAssistantConfig(BaseModel):
         description="Entity ID prefix, lowercase letters, digits and underscores (e.g., myelectricaldata → sensor.myelectricaldata_tempo_today)",
     )
     discovery_prefix: str = Field(default="homeassistant", description="Home Assistant discovery topic prefix")
+    entity_language: Literal["fr", "en"] = Field(
+        default="fr",
+        description="Display language of entity names: fr (default) or en (historical names). Only names change, never entity_id",
+    )
 
     # WebSocket API mode (Energy Dashboard statistics)
     ha_url: Optional[str] = Field(default=None, description="Home Assistant URL (e.g., http://homeassistant.local:8123)")
