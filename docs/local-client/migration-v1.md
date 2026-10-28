@@ -257,11 +257,20 @@ Gardez la sauvegarde du dossier `data` quelque temps : l'import peut être relan
 
 ## Questions fréquentes
 
-### « Révision V1 … non prise en charge »
+### « Avertissement : cache.db en révision … »
 
-Le `cache.db` vient d'une version de la V1 trop ancienne. Démarrez une fois la dernière version 0.x de
-la V1 sur ce dossier `data` (elle met le `cache.db` à jour au démarrage), arrêtez-la, puis relancez
-l'import.
+Toutes les versions publiées de la V1 (0.x) laissent un `cache.db` en révision `e990284249e4`.
+Certaines images non publiées (construites depuis une branche de développement) en portent une autre,
+par exemple `d4f21c9a8b6e`. L'import ne s'arrête pas à la révision : il vérifie que les tables et
+colonnes qu'il lit sont toutes présentes, importe si c'est le cas et le signale par cet avertissement.
+Lancez d'abord `--dry-run` et vérifiez que les volumes du bilan sont cohérents avant l'import réel.
+
+### « Base V1 en révision … incompatible avec l'import, il y manque : … »
+
+Le `cache.db` n'a pas toutes les tables ou colonnes lues par l'import (elles sont nommées dans le
+message, sous la forme `table` ou `table.colonne`). Il vient d'une version de la V1 trop ancienne, ou
+d'une variante modifiée. Démarrez une fois la dernière version 0.x de la V1 sur ce dossier `data` (elle
+met le `cache.db` à jour au démarrage), arrêtez-la, puis relancez l'import.
 
 ### Puis-je relancer l'import ?
 
