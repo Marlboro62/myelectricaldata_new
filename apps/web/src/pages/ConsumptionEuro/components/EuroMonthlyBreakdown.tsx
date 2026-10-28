@@ -10,13 +10,15 @@ import {
 } from 'recharts'
 import { ChevronDown, ChevronUp, Download } from 'lucide-react'
 import { toast } from '@/stores/notificationStore'
-import type { YearlyCost } from '../types/euro.types'
-import { sumTaxBreakdown } from '@/utils/electricityTaxes'
+import type { SelectedOfferWithProvider, YearlyCost } from '../types/euro.types'
+import { offerPriceMonth, sumTaxBreakdown } from '@/utils/electricityTaxes'
 import { EuroTaxBreakdown } from './EuroTaxBreakdown'
 
 interface EuroMonthlyBreakdownProps {
   yearlyCosts: YearlyCost[]
   isDarkMode: boolean
+  /** Offre dont les prix ont servi au calcul : date les taux de taxes */
+  selectedOffer?: SelectedOfferWithProvider | null
 }
 
 // Format currency
@@ -43,7 +45,8 @@ const MONTH_NAMES = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
 ]
 
-export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode }: EuroMonthlyBreakdownProps) {
+export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode, selectedOffer }: EuroMonthlyBreakdownProps) {
+  const priceMonth = offerPriceMonth(selectedOffer)
   const [expandedYear, setExpandedYear] = useState<string | null>(yearlyCosts[0]?.year || null)
 
   const handleExportBreakdown = () => {
@@ -58,7 +61,7 @@ export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode }: EuroMonthlyBre
       totalKwh: year.totalKwh,
       hcKwh: year.hcKwh,
       hpKwh: year.hpKwh,
-      taxes: sumTaxBreakdown(year.months),
+      taxes: sumTaxBreakdown(year.months, priceMonth),
       months: year.months.map(m => ({
         month: m.month,
         monthLabel: m.monthLabel,
@@ -286,7 +289,7 @@ export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode }: EuroMonthlyBre
                 </div>
 
                 {/* Taxes et contributions comprises dans le total */}
-                <EuroTaxBreakdown year={year} />
+                <EuroTaxBreakdown year={year} priceMonth={priceMonth} />
               </div>
             )}
           </div>
