@@ -67,7 +67,7 @@ class Recorder:
 def stats() -> MagicMock:
     service = MagicMock()
     service.get_day_total = AsyncMock(return_value=1500)
-    service.db.execute = AsyncMock(return_value=Result(scalar=True))  # PDL avec production
+    service.db.execute = AsyncMock(return_value=Result(one=True))  # PDL avec production (lu par scalar_one_or_none)
     return service
 
 
@@ -154,6 +154,10 @@ async def test_identifiants_complets_et_noms_bien_traduits() -> None:
         assert fr[topic]["default_entity_id"] == en[topic]["default_entity_id"]
         assert fr[topic]["object_id"] == en[topic]["object_id"]
         assert fr[topic]["default_entity_id"] == f"sensor.{fr[topic]['uniq_id']}"
+
+    # Production : les 4 capteurs doivent bien être publiés (sinon la preuve les ignorerait sans bruit)
+    production = [t for t in fr if "production" in fr[t]["uniq_id"] and PDL in fr[t]["uniq_id"]]
+    assert len(production) == 4, f"capteurs de production publiés : {production}"
 
     # Garde-fou : la langue change bien des noms (sans cela l'égalité ci-dessus serait vide de sens)
     changed = [t for t in fr if fr[t]["name"] != en[t]["name"]]
