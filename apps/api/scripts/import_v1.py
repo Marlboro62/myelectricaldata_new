@@ -17,7 +17,13 @@ import sys
 sys.path.insert(0, "/app")
 
 from src.config import settings  # noqa: E402
-from src.services.import_v1 import TargetDatabaseError, V1SchemaError, run_import, to_source_url  # noqa: E402
+from src.services.import_v1 import (  # noqa: E402
+    V1_ALEMBIC_HEAD,
+    TargetDatabaseError,
+    V1SchemaError,
+    run_import,
+    to_source_url,
+)
 
 TABLES = {
     "consumption_data": "Consommation",
@@ -49,6 +55,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 def print_report(report) -> None:
     mode = "À BLANC, rien n'a été écrit" if report.dry_run else "terminé"
     print(f"Import V1 {mode}")
+    if report.v1_revision != V1_ALEMBIC_HEAD:
+        print(f"  Avertissement : cache.db en révision {report.v1_revision}, différente de celle des versions V1 "
+              f"publiées ({V1_ALEMBIC_HEAD}) ; les tables lues sont conformes, vérifiez le bilan avant d'importer")
     for table, label in TABLES.items():
         print(f"  {label:14} {report.inserted.get(table, 0):>8} ajoutées   {report.present.get(table, 0):>8} déjà présentes")
     for motif, count in sorted(report.skipped.items()):

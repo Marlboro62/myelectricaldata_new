@@ -57,10 +57,67 @@ def test_url_mysql_refusee():
         to_source_url("mysql://med@db/med")
 
 
-async def test_revision_v1_inconnue_refusee(tmp_path):
-    path = V1Cache(tmp_path / "cache.db", revision="0b59c59dad3c").usage_point(PDL).close()
-    with pytest.raises(V1SchemaError, match="0b59c59dad3c"):
+async def test_revision_de_tete_remontee_dans_les_lignes(cache):
+    path = cache.daily(PDL, date(2020, 1, 5), 1000).close()
+    records = await load_v1(to_source_url(str(path)))
+    assert records.revision == V1_HEAD
+
+
+async def test_revision_v1_inconnue_aux_colonnes_conformes_acceptee(tmp_path):
+    """Issue #164 : un cache.db en révision d4f21c9a8b6e (image V1 non publiée) au schéma lu identique s'importe."""
+    path = (
+        V1Cache(tmp_path / "cache.db", revision="d4f21c9a8b6e").usage_point(PDL)
+        .daily(PDL, date(2020, 1, 5), 1000)
+        .detail_day(PDL, date(2020, 1, 5))
+        .max_power(PDL, date(2020, 1, 5), 6100, datetime(2020, 1, 5, 18, 42))
+        .close()
+    )
+    records = await load_v1(to_source_url(str(path)))
+    assert records.revision == "d4f21c9a8b6e"
+    assert len(records.consumption) == 1 + 48
+    assert len(records.max_power) == 1
+
+
+@pytest.mark.parametrize(
+    "manque",
+    [
+        "consumption_daily.fail_count",
+        "production_daily.blacklist",
+        "consumption_detail.interval",
+        "production_detail.value",
+        "consumption_daily_max_power.event_date",
+    ],
+)
+async def test_colonne_manquante_refusee_en_la_nommant(tmp_path, manque):
+    """Sur la tête comme sur une révision inconnue : c'est le schéma lu qui décide, et le refus nomme table.colonne.
+    Le cache.db n'a aucun PDL : le contrôle passe avant la lecture des données."""
+    for revision in (V1_HEAD, "d4f21c9a8b6e"):
+        path = V1Cache(tmp_path / f"{revision}.db", revision=revision, missing=(manque,)).close()
+        with pytest.raises(V1SchemaError, match=manque.replace(".", r"\.")):
+            await load_v1(to_source_url(str(path)))
+
+
+@pytest.mark.parametrize("table", ["production_detail", "usage_points", "consumption_daily_max_power"])
+async def test_table_manquante_refusee_en_la_nommant(tmp_path, table):
+    path = V1Cache(tmp_path / "cache.db", revision="d4f21c9a8b6e", missing=(table,)).close()
+    with pytest.raises(V1SchemaError, match=table):
         await load_v1(to_source_url(str(path)))
+
+
+async def test_tous_les_manques_sont_listes(tmp_path):
+    manques = ("consumption_daily.fail_count", "consumption_detail.interval", "production_daily")
+    path = V1Cache(tmp_path / "cache.db", revision="d4f21c9a8b6e", missing=manques).close()
+    with pytest.raises(V1SchemaError) as erreur:
+        await load_v1(to_source_url(str(path)))
+    for manque in manques:
+        assert manque in str(erreur.value)
+
+
+async def test_colonnes_en_plus_tolerees(cache):
+    """Le schéma V1 porte d'autres colonnes (measure_type, name…) que l'import ne lit pas : jamais un motif de refus."""
+    path = cache.daily(PDL, date(2020, 1, 5), 1000).close()
+    records = await load_v1(to_source_url(str(path)))
+    assert len(records.consumption) == 1
 
 
 async def test_base_sans_alembic_refusee(tmp_path):
