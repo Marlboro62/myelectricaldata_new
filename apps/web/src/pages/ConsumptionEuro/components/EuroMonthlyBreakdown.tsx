@@ -11,6 +11,8 @@ import {
 import { ChevronDown, ChevronUp, Download } from 'lucide-react'
 import { toast } from '@/stores/notificationStore'
 import type { YearlyCost } from '../types/euro.types'
+import { sumTaxBreakdown } from '@/utils/electricityTaxes'
+import { EuroTaxBreakdown } from './EuroTaxBreakdown'
 
 interface EuroMonthlyBreakdownProps {
   yearlyCosts: YearlyCost[]
@@ -56,6 +58,7 @@ export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode }: EuroMonthlyBre
       totalKwh: year.totalKwh,
       hcKwh: year.hcKwh,
       hpKwh: year.hpKwh,
+      taxes: sumTaxBreakdown(year.months),
       months: year.months.map(m => ({
         month: m.month,
         monthLabel: m.monthLabel,
@@ -281,6 +284,9 @@ export function EuroMonthlyBreakdown({ yearlyCosts, isDarkMode }: EuroMonthlyBre
                     </tfoot>
                   </table>
                 </div>
+
+                {/* Taxes et contributions comprises dans le total */}
+                <EuroTaxBreakdown year={year} />
               </div>
             )}
           </div>

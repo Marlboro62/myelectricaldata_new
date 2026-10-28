@@ -79,6 +79,8 @@ La page est entièrement fonctionnelle avec toutes les fonctionnalités principa
 - Tableau détaillé mois par mois
 - Répartition HC/HP pour les offres concernées
 - Comparaison avec l'année précédente
+- Bloc « Taxes et contributions (estimation) » (`EuroTaxBreakdown`) dans le détail de chaque période :
+  énergie HT, accise sur l'électricité, abonnement HT (CTA comprise) et TVA, avec leur part du total TTC
 
 ### 6. Bloc informatif (`InfoBlock`)
 
@@ -96,6 +98,7 @@ apps/web/src/pages/ConsumptionEuro/
 │   ├── EuroCostCards.tsx              # Cartes statistiques (total, moyenne, évolution)
 │   ├── EuroYearlyChart.tsx            # Graphique des coûts mensuels
 │   ├── EuroMonthlyBreakdown.tsx       # Tableau détaillé par mois
+│   ├── EuroTaxBreakdown.tsx           # Détail des taxes comprises dans le total
 │   ├── OfferPricingCard.tsx           # Détail de l'offre + comparaison
 │   └── InfoBlock.tsx                  # Bloc informatif
 ├── hooks/
@@ -173,8 +176,25 @@ cost = sum(
 Les prix des offres sont en TTC et incluent :
 
 - TURPE (acheminement)
-- Taxes (CTA, CSPE, TCFE)
-- TVA (5.5% abonnement, 20% consommation)
+- Accise sur l'électricité (ex-TICFE / CSPE) et CTA
+- TVA : 20 % sur la consommation ; sur l'abonnement, 5,5 % jusqu'au 31 juillet 2025 puis 20 % depuis le 1er août 2025
+
+### Détail des taxes (`utils/electricityTaxes.ts`)
+
+Le bloc `EuroTaxBreakdown` retrouve, mois par mois, ce que contient le total TTC (rien n'est ajouté) :
+
+```typescript
+consommationHT = consommationTTC / 1.2
+accise = kWh * acciseRate(mois)          // tarif légal « ménages » en vigueur ce mois-là
+energieHT = consommationHT - accise      // fourniture et acheminement
+abonnementHT = abonnementTTC / (1 + subscriptionVatRate(mois))  // 5,5 % avant 2025-08, 20 % ensuite
+TVA = (consommationTTC - consommationHT) + (abonnementTTC - abonnementHT)
+```
+
+Tarifs d'accise (€/kWh HT) : 0,0225 (2016), 0,001 (février 2022), 0,021 (février 2024), 0,0337 (février 2025),
+0,02998 (août 2025), 0,03085 (février 2026), 0,03062 (août 2026). Les taux suivants s'ajoutent dans `ACCISE_RATES`.
+
+La CTA est calculée sur la part fixe du TURPE, absente des données d'offre : elle reste comprise dans l'abonnement HT.
 
 ---
 
