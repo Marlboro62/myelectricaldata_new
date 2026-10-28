@@ -337,6 +337,7 @@ export default function HomeAssistant() {
   const [mqttTls, setMqttTls] = useState(false)
   const [entityPrefix, setEntityPrefix] = useState(runtimeDefaults.entityPrefix)
   const [discoveryPrefix, setDiscoveryPrefix] = useState(runtimeDefaults.discoveryPrefix)
+  const [entityLanguage, setEntityLanguage] = useState<'fr' | 'en'>('fr')
 
   // WebSocket API config
   const [haUrl, setHaUrl] = useState(runtimeDefaults.haUrl)
@@ -453,6 +454,7 @@ export default function HomeAssistant() {
         setMqttTls(cfg.mqtt_use_tls || false)
         setEntityPrefix(cfg.entity_prefix || 'myelectricaldata')
         setDiscoveryPrefix(cfg.discovery_prefix || 'homeassistant')
+        setEntityLanguage(cfg.entity_language === 'en' ? 'en' : 'fr')
         setMqttExportEnabled(cfg.mqtt_enabled ?? true)
 
         // WebSocket config
@@ -485,6 +487,7 @@ export default function HomeAssistant() {
         mqtt_use_tls: mqttTls,
         entity_prefix: entityPrefix,
         discovery_prefix: discoveryPrefix,
+        entity_language: entityLanguage,
         mqtt_enabled: mqttExportEnabled,
         // WebSocket API config
         ha_url: haUrl,
@@ -875,6 +878,23 @@ export default function HomeAssistant() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Topic: <strong>{discoveryPrefix || 'homeassistant'}</strong>/sensor/.../config. Doit être celui de
                       l'intégration MQTT de Home Assistant, sinon aucune entité n'est créée.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Langue des noms des capteurs
+                    </label>
+                    <select
+                      value={entityLanguage}
+                      onChange={(e) => setEntityLanguage(e.target.value === 'en' ? 'en' : 'fr')}
+                      className="w-full px-4 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="fr">Français (Consommation, Prix bleu HC…)</option>
+                      <option value="en">English (consumption, Price Blue HC…)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Seuls les noms affichés changent : les entity_id, et donc vos cartes et automatisations, restent
+                      les mêmes.
                     </p>
                   </div>
               </div>

@@ -23,6 +23,8 @@ export interface HomeAssistantConfig {
   mqtt_use_tls?: boolean
   entity_prefix?: string
   discovery_prefix?: string
+  // Langue des noms affichés des entités : 'fr' (défaut) ou 'en' (noms historiques)
+  entity_language?: 'fr' | 'en'
   // WebSocket API mode (Energy Dashboard statistics)
   ha_url?: string
   ha_token?: string
