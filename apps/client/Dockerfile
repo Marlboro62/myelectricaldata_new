@@ -83,8 +83,10 @@ RUN chmod +x /entrypoint.sh /app/entrypoint.sh /runtime-config.sh
 
 EXPOSE 80
 
-# Santé de bout en bout : nginx puis l'API
+# Santé : nginx (le front), puis l'API directement sur sa boucle locale. /api/ping à travers
+# nginx serait refusé (400) dès que ALLOWED_HOSTS est renseigné : seule /ping échappe au contrôle
+# de l'en-tête Host, et la sonde se présente avec Host: 127.0.0.1.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1/api/ping', timeout=5)"]
+    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1/', timeout=5); u.urlopen('http://127.0.0.1:8000/ping', timeout=5)"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

@@ -60,7 +60,7 @@ services:
       - VITE_DEFAULT_DISCOVERY_PREFIX=${VITE_DEFAULT_DISCOVERY_PREFIX:-homeassistant}
       - VITE_DEFAULT_HA_URL=${VITE_DEFAULT_HA_URL:-}
       - VITE_DEFAULT_VM_URL=${VITE_DEFAULT_VM_URL:-}
-    # Santé : HEALTHCHECK de l'image (/api/ping à travers nginx)
+    # Santé : HEALTHCHECK de l'image (nginx, puis /ping de l'API sur la boucle locale)
     volumes:
       - myelectricaldata_data:/app/data
 

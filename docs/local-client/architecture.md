@@ -149,7 +149,8 @@ Avec Docker Compose, le client tourne au choix :
   `root_path="/api"`), sans mise en tampon pour l'export en SSE. Si l'un des deux processus
   s'arrête, le superviseur arrête l'autre et le conteneur sort en erreur : Docker le relance
   (`restart: unless-stopped`) au lieu de laisser nginx répondre 502. Le `HEALTHCHECK` de l'image
-  interroge `/api/ping` à travers nginx ;
+  interroge nginx puis `/ping` de l'API sur la boucle locale (pas `/api/ping` : avec `ALLOWED_HOSTS`
+  renseigné, la sonde, qui se présente en `127.0.0.1`, serait refusée) ;
 - **en deux conteneurs** (`docker-compose.sqlite.yml`, `docker-compose.yml`, images `frontend` et
   `backend`) : le nginx du frontend transmet `/api` au service `backend` (`API_PROXY_URL`).
 

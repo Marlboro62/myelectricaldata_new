@@ -228,13 +228,21 @@ test_client() {
     sh -c "docker exec $c nginx -T 2>/dev/null | grep -q 'proxy_buffering off;' && docker exec $c nginx -T 2>/dev/null | grep -q 'proxy_read_timeout 300s;'"
   check "/app/data existe et contient la base SQLite migrée" \
     sh -c "docker exec $c test -s /app/data/myelectricaldata.db"
-  check "HEALTHCHECK de l'image sur /api/ping" \
+  check "HEALTHCHECK de l'image : nginx puis /ping de l'API" \
     sh -c "docker inspect -f '{{json .Config.Healthcheck.Test}}' $c | grep -q 'ping'"
+  # Régression : avec ALLOWED_HOSTS renseigné, la sonde (Host: 127.0.0.1) ne doit pas être refusée
+  local h=med75-client-h-$RUN_ID
+  start "$h" "$CLIENT_IMAGE" "${FAKE_ACCOUNT[@]}" -e ALLOWED_HOSTS=exemple.test
   for _ in $(seq 1 60); do
     [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] && break
     sleep 2
   done
   check "conteneur healthy" test "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy
+  for _ in $(seq 1 30); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "$h" 2>/dev/null)" = healthy ] && break
+    sleep 2
+  done
+  check "conteneur healthy avec ALLOWED_HOSTS renseigné" test "$(docker inspect -f '{{.State.Health.Status}}' "$h" 2>/dev/null)" = healthy
 
   section "Image client : un processus meurt, le conteneur s'arrête"
   local api_pid
