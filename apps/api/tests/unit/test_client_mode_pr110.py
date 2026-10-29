@@ -55,6 +55,8 @@ def sync_service(db):
     service = SyncService.__new__(SyncService)
     service.db = db
     service.adapter = MagicMock()
+    # Mise en service inconnue : fenêtre Enedis complète (borne testée dans test_sync_debut_contrat.py)
+    service._activation_date = AsyncMock(return_value=None)
     return service
 
 

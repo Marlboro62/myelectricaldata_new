@@ -83,7 +83,8 @@ Le mode client propose une navigation simplifiée par rapport au mode serveur.
 Les pages affichent tout l'historique local, y compris celui importé depuis la V1
 ([Migrer depuis la V1](./migration-v1.md)) : une carte, une barre et une courbe par année, sans
 plafond. Enedis n'est sollicité que dans sa fenêtre (3 ans de journalier, 2 ans de courbe de
-charge), pour combler les trous récents.
+charge), pour combler les trous récents, et jamais avant la date de mise en service du contrat
+(consommation ou production), où il n'a aucune donnée.
 
 ### Consommation (Euro)
 
