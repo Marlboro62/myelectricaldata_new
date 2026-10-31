@@ -139,3 +139,42 @@ async def test_liste_des_pdl_recopie_la_mise_en_service(db: AsyncSession) -> Non
     pdl = (await db.execute(select(PDL))).scalar_one()
     await db.refresh(pdl)
     assert pdl.activation_date == date(2026, 1, 10)
+
+
+# Lectures de l'interface (routers/enedis_client.py) : même borne que la synchro
+
+
+async def test_interface_ne_redemande_pas_avant_la_mise_en_service(db: AsyncSession) -> None:
+    from src.routers.enedis_client import _after_activation
+
+    activation = date.today() - timedelta(days=30)
+    db.add(contract(consumption=activation))
+    await db.commit()
+    before = (activation - timedelta(days=60), activation - timedelta(days=53))
+    spanning = (activation - timedelta(days=3), activation + timedelta(days=4))
+    after = (activation + timedelta(days=10), activation + timedelta(days=17))
+
+    ranges = await _after_activation(db, PRM, "consumption", [before, spanning, after])
+
+    assert ranges == [(activation, spanning[1]), after]
+
+
+async def test_interface_production_bornee_a_sa_propre_date(db: AsyncSession) -> None:
+    from src.routers.enedis_client import _after_activation
+
+    consumption, production = date.today() - timedelta(days=400), date.today() - timedelta(days=20)
+    db.add(contract(consumption=consumption, production=production))
+    await db.commit()
+    old = (date.today() - timedelta(days=100), date.today() - timedelta(days=93))
+
+    assert await _after_activation(db, PRM, "consumption", [old]) == [old]
+    assert await _after_activation(db, PRM, "production", [old]) == []
+
+
+async def test_interface_sans_date_connue_inchangee(db: AsyncSession) -> None:
+    from src.routers.enedis_client import _after_activation
+
+    old = (date.today() - timedelta(days=700), date.today() - timedelta(days=693))
+
+    assert await _after_activation(db, PRM, "consumption", [old]) == [old]
+    assert await _after_activation(db, PRM, "production", [old]) == [old]

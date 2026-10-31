@@ -100,6 +100,25 @@ _energy_sync_lock = asyncio.Lock()
 _daily_upsert_effective: bool | None = None
 
 
+async def get_activation_date(db: AsyncSession, usage_point_id: str, data_type: str) -> date | None:
+    """Date de mise en service (consommation ou production) : Enedis n'a aucune donnée avant (#188).
+
+    Lue dans le contrat déjà synchronisé (synthese_contrat), sinon dans le PDL pour la consommation.
+    Sert à la synchro et aux lectures de l'interface (routers/enedis_client.py).
+    """
+    result = await db.execute(select(ContractData.raw_data).where(ContractData.usage_point_id == usage_point_id))
+    raw = result.scalar_one_or_none()
+    if isinstance(raw, dict):
+        key = "production_activation_date" if data_type == "production" else "activation_date"
+        activation = _parse_iso_date(parse_contract(raw).get(key))
+        if activation is not None:
+            return activation
+    if data_type == "production":
+        return None
+    result = await db.execute(select(PDL.activation_date).where(PDL.usage_point_id == usage_point_id))
+    return _parse_iso_date(result.scalar_one_or_none())
+
+
 class SyncService:
     """Service to sync data from MyElectricalData API to the local database (PostgreSQL or SQLite)"""
 
@@ -581,23 +600,8 @@ class SyncService:
         )
 
     async def _activation_date(self, usage_point_id: str, data_type: str) -> date | None:
-        """Date de mise en service (consommation ou production) : Enedis n'a aucune donnée avant (#188).
-
-        Lue dans le contrat déjà synchronisé (synthese_contrat), sinon dans le PDL pour la consommation.
-        """
-        result = await self.db.execute(
-            select(ContractData.raw_data).where(ContractData.usage_point_id == usage_point_id)
-        )
-        raw = result.scalar_one_or_none()
-        if isinstance(raw, dict):
-            key = "production_activation_date" if data_type == "production" else "activation_date"
-            activation = _parse_iso_date(parse_contract(raw).get(key))
-            if activation is not None:
-                return activation
-        if data_type == "production":
-            return None
-        result = await self.db.execute(select(PDL.activation_date).where(PDL.usage_point_id == usage_point_id))
-        return _parse_iso_date(result.scalar_one_or_none())
+        """Date de mise en service (consommation ou production) : Enedis n'a aucune donnée avant (#188)."""
+        return await get_activation_date(self.db, usage_point_id, data_type)
 
     async def _sync_start(self, usage_point_id: str, data_type: str, window_start: date, end_date: date) -> date:
         """Début de la plage à synchroniser : la fenêtre Enedis, pas avant la mise en service du contrat.
