@@ -115,3 +115,47 @@ def test_contrat_enedis_conserve_les_saisons(monkeypatch):
     pdl = SimpleNamespace(subscribed_power=None, offpeak_hours=dict(RAW), activation_date=None)
     enedis_contract.apply_contract_to_pdl(pdl, {})
     assert pdl.offpeak_hours == {"default": "HC (23H00-7H00)", "seasons": SEASONS}
+
+
+# --- Exports : plages saisonnières selon l'option tarifaire (cf. exporters/base.py) ---
+
+def _fake_db(pdl_row, contract_row, offer_row):
+    from unittest.mock import AsyncMock, MagicMock
+
+    results = []
+    for value in (pdl_row, contract_row, offer_row):
+        result = MagicMock()
+        result.first.return_value = value
+        results.append(result)
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=results)
+    return db
+
+
+def _exporter():
+    from src.services.exporters.home_assistant import HomeAssistantExporter
+
+    exporter = HomeAssistantExporter.__new__(HomeAssistantExporter)
+    exporter.config = {}
+    exporter.prefix = "myelectricaldata"
+    return exporter
+
+
+def _pdl(option):
+    return SimpleNamespace(pricing_option=option, offpeak_hours=dict(RAW), subscribed_power=6, selected_offer_id=None)
+
+
+@pytest.mark.asyncio
+async def test_export_hc_hp_applique_les_saisons():
+    _, ranges, _ = await _exporter()._get_pdl_contract_info(_fake_db(_pdl("HC_HP"), None, None), "123")
+    assert isinstance(ranges, SeasonalRanges)
+    assert is_offpeak(date(2027, 7, 14), 12, 0, ranges)
+
+
+@pytest.mark.asyncio
+async def test_export_tempo_ignore_les_saisons():
+    # Tempo : 22h-6h toute l'année, hors réforme des heures creuses
+    _, ranges, _ = await _exporter()._get_pdl_contract_info(_fake_db(_pdl("TEMPO"), None, None), "123")
+    assert not isinstance(ranges, SeasonalRanges)
+    assert not is_offpeak(date(2027, 7, 14), 12, 0, ranges)
+    assert is_offpeak(date(2027, 7, 14), 23, 0, ranges)

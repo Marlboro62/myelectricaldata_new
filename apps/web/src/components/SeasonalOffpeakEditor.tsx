@@ -166,7 +166,8 @@ export default function SeasonalOffpeakEditor({ pdlId, offpeakHours, disabled = 
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Avec la réforme des heures creuses, les plages peuvent changer entre l'hiver et l'été. Saisissez celles
             indiquées par votre fournisseur. Avant la date de début, et pour une saison sans plage, les heures creuses
-            habituelles ci-dessus s'appliquent.
+            habituelles ci-dessus s'appliquent. Sans effet avec une offre Tempo, dont les heures creuses restent
+            de 22h à 6h toute l'année.
           </p>
 
           <div className="flex items-center gap-2 text-sm">

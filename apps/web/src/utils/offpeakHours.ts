@@ -57,13 +57,22 @@ export function parseOffpeakSeasons(offpeakConfig?: unknown): OffpeakSeasons | n
   return { since, summer, winter }
 }
 
+/** Option tarifaire Tempo : heures creuses fixes (22h-6h), hors réforme des heures creuses */
+export function isTempoOption(option?: string | null): boolean {
+  return (option || '').toUpperCase().includes('TEMPO')
+}
+
 /**
  * Plages HC à appliquer selon la date du relevé : plages de la saison à partir de la date de
  * début, sinon (avant cette date, ou saison non saisie) les plages habituelles.
+ * ignoreSeasons : offre Tempo, dont les heures creuses ne changent pas avec la saison.
  */
-export function offpeakRangesResolver(offpeakConfig?: unknown): (date: Date) => OffpeakRange[] {
+export function offpeakRangesResolver(
+  offpeakConfig?: unknown,
+  options: { ignoreSeasons?: boolean } = {},
+): (date: Date) => OffpeakRange[] {
   const base = parseOffpeakHours(offpeakConfig as Parameters<typeof parseOffpeakHours>[0])
-  const seasons = parseOffpeakSeasons(offpeakConfig)
+  const seasons = options.ignoreSeasons ? null : parseOffpeakSeasons(offpeakConfig)
   if (!seasons) return () => base
   return (date: Date) => {
     if (seasons.since && localDateKey(date) < seasons.since) return base

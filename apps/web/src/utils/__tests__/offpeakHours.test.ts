@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isOffpeakTime, offpeakFraction, offpeakRangesResolver, parseOffpeakHours, parseOffpeakSeasons, seasonOf } from '../offpeakHours'
+import { isOffpeakTime, isTempoOption, offpeakFraction, offpeakRangesResolver, parseOffpeakHours, parseOffpeakSeasons, seasonOf } from '../offpeakHours'
 
 // Contrat dont les plages HC ne tombent pas sur la demi-heure (cas réel comparé au ZLinky)
 const DECALEES = parseOffpeakHours({ ranges: ['23:32-05:32', '14:32-16:32'] })
@@ -78,5 +78,12 @@ describe('heures creuses saisonnières', () => {
     const at = offpeakRangesResolver({ ranges: ['22:00-06:00'], seasons: { summer: ['11:00-17:00'] } })
     expect(at(new Date(2027, 0, 14))).toEqual(parseOffpeakHours(['22:00-06:00']))
     expect(isOffpeakTime(12, 0, at(new Date(2020, 5, 1)))).toBe(true) // pas de date de début
+  })
+
+  it('offre Tempo : plages habituelles toute l\'année', () => {
+    expect(isTempoOption('TEMPO')).toBe(true)
+    expect(isTempoOption('HC_HP')).toBe(false)
+    const at = offpeakRangesResolver(config, { ignoreSeasons: true })
+    expect(at(new Date(2027, 6, 14))).toEqual(parseOffpeakHours(['22:00-06:00']))
   })
 })

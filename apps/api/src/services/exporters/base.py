@@ -170,10 +170,10 @@ class BaseExporter(ABC):
         if profile.family == "TEMPO" and not offpeak_ranges:
             offpeak_ranges = list(DEFAULT_OFFPEAK_RANGES)
 
-        # Heures creuses saisonnières saisies dans le client (clé « seasons » du PDL), sauf grille
-        # fournisseur Zen Flex
+        # Heures creuses saisonnières saisies dans le client (clé « seasons » du PDL), sauf grilles
+        # fournisseur : Tempo (22h-6h toute l'année, hors réforme des heures creuses) et Zen Flex
         zen_flex = offer is not None and is_zen_flex_offer(offer.offer_type, offer.name)
-        if pdl_data and profile.family != "BASE" and not zen_flex:
+        if pdl_data and profile.family == "HC_HP" and not zen_flex:
             offpeak_ranges = with_seasons(offpeak_ranges, pdl_data.offpeak_hours)
 
         return profile, offpeak_ranges, subscribed_power

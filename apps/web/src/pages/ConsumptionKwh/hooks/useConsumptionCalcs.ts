@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { offpeakRangesResolver, offpeakFraction } from '@/utils/offpeakHours'
+import { isTempoOption, offpeakRangesResolver, offpeakFraction } from '@/utils/offpeakHours'
 import { useDatePreferencesStore } from '@/stores/datePreferencesStore'
 import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
 import type { MeasureReading } from '@/types/api'
@@ -556,7 +556,9 @@ export function useConsumptionCalcs({
       return []
     }
 
-    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours)
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours, {
+      ignoreSeasons: isTempoOption(selectedPDLDetails?.pricing_option),
+    })
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({
       queryKey: ['consumptionDetail', selectedPDL],
@@ -640,7 +642,7 @@ export function useConsumptionCalcs({
     }).filter(p => p.totalKwh > 0)
 
     return result
-  }, [selectedPDL, selectedPDLDetails?.offpeak_hours, hcHpCalculationTrigger, queryClient])
+  }, [selectedPDL, selectedPDLDetails?.offpeak_hours, selectedPDLDetails?.pricing_option, hcHpCalculationTrigger, queryClient])
 
   // Calculate monthly HC/HP data for each rolling year period
   const monthlyHcHpByYear = useMemo(() => {
@@ -648,7 +650,9 @@ export function useConsumptionCalcs({
       return []
     }
 
-    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails.offpeak_hours)
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails.offpeak_hours, {
+      ignoreSeasons: isTempoOption(selectedPDLDetails.pricing_option),
+    })
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({
       queryKey: ['consumptionDetail', selectedPDL],
@@ -751,7 +755,7 @@ export function useConsumptionCalcs({
     }).filter(p => p.months.length >= 12)
 
     return result
-  }, [selectedPDL, selectedPDLDetails?.offpeak_hours, hcHpCalculationTrigger, queryClient])
+  }, [selectedPDL, selectedPDLDetails?.offpeak_hours, selectedPDLDetails?.pricing_option, hcHpCalculationTrigger, queryClient])
 
   return {
     chartData,

@@ -142,10 +142,11 @@ export function useConsumptionEuroCalcs({
       return []
     }
 
-    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours)
+    const isTempo = selectedOffer.offer_type === 'TEMPO'
+    // Tempo : heures creuses fixes, les plages saisonnières ne s'appliquent pas
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours, { ignoreSeasons: isTempo })
     const defaultPrices = getOfferPrices(selectedOffer)
     const subscriptionMonthly = parsePrice(selectedOffer.subscription_price)
-    const isTempo = selectedOffer.offer_type === 'TEMPO'
 
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({

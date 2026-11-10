@@ -184,7 +184,7 @@ Sous les plages d'heures creuses, le bloc **« Heures creuses saisonnières »**
 - Enregistrées dans la clé `seasons` de `offpeak_hours` : `{"ranges": [...], "seasons": {"since": "2026-11-01", "winter": ["22:00-06:00"], "summer": ["02:00-06:00", "11:00-15:00"]}}`.
 - Conservées par la synchronisation (passerelle ou contrat Enedis) et par la modification des plages habituelles ; `"seasons": null` les retire.
 - Avant la date de début, et pour une saison sans plage, les plages habituelles s'appliquent : l'historique garde ses anciennes heures creuses.
-- Utilisées par les pages Consommation (kWh et €) et par les exports (`exporters/tariff.py`, sauf grille fournisseur Zen Flex).
+- Utilisées par les pages Consommation (kWh et €) et par les exports (`exporters/tariff.py`) pour les options heures pleines / heures creuses. Sans effet avec Tempo (22h-6h toute l'année, hors réforme) et avec la grille fournisseur Zen Flex.
 
 ### Liaison Consommation-Production
 
