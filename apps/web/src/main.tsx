@@ -60,6 +60,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               return false
             }
 
+            // Ne pas persister les configurations d'export : après une réinstallation (base neuve),
+            // l'ancienne configuration restait affichée et son identifiant donnait des 404
+            // (enregistrement, test et lancement de l'export Home Assistant, MQTT, VictoriaMetrics)
+            if (queryKey === 'export-configs') {
+              return false
+            }
+
             // Don't persist energy providers/offers - they change when scrapers run
             // and must always be fresh from the server to avoid stale cache issues
             if (queryKey === 'energy-providers' || queryKey === 'energy-offers' || queryKey === 'energy-providers-with-scrapers' || queryKey === 'sync-status') {
@@ -79,6 +86,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       }}
     >
       <BrowserRouter
+        basename={(window as unknown as { __ENV__?: { VITE_BASE_PATH?: string } }).__ENV__?.VITE_BASE_PATH || undefined}
         future={{
           v7_startTransition: true,
           v7_relativeSplatPath: true
