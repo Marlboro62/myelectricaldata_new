@@ -20,6 +20,7 @@ from .tariff import (
     parse_offpeak_ranges,
     summarize_hp_hc_kwh,
     tariff_profile,
+    with_seasons,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ class BaseExporter(ABC):
         profile = tariff_profile(pricing_option)
 
         selected_offer_id = getattr(pdl_data, "selected_offer_id", None) if pdl_data else None
+        offer = None
         if selected_offer_id:
             result = await db.execute(
                 select(EnergyOffer.offer_type, EnergyOffer.name, EnergyOffer.hc_schedules).where(
@@ -167,6 +169,12 @@ class BaseExporter(ABC):
 
         if profile.family == "TEMPO" and not offpeak_ranges:
             offpeak_ranges = list(DEFAULT_OFFPEAK_RANGES)
+
+        # Heures creuses saisonnières saisies dans le client (clé « seasons » du PDL), sauf grille
+        # fournisseur Zen Flex
+        zen_flex = offer is not None and is_zen_flex_offer(offer.offer_type, offer.name)
+        if pdl_data and profile.family != "BASE" and not zen_flex:
+            offpeak_ranges = with_seasons(offpeak_ranges, pdl_data.offpeak_hours)
 
         return profile, offpeak_ranges, subscribed_power
 

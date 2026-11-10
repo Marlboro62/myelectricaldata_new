@@ -13,6 +13,13 @@ Formats de offpeak_hours rencontrés en base :
 - {"default": "HC (2H30-6H30;13H00-15H00)"}       (brut Enedis multi-plages)
 - [{"start": "22:00", "end": "06:00"}, ...]       (ancien format)
 - ["22:00-06:00", ...]                            (liste de chaînes)
+
+Heures creuses saisonnières (réforme TURPE 7, à partir de novembre 2025) : clé « seasons » de
+PDL.offpeak_hours, saisie dans le client et conservée par la synchronisation :
+- {"ranges": [...], "seasons": {"since": "2026-11-01", "winter": ["0:00-6:00", "22:00-24:00"],
+  "summer": ["2:00-6:00", "11:00-15:00"]}}
+Hiver du 1er novembre au 31 mars, été du 1er avril au 31 octobre (CRE). Avant « since », ou pour
+une saison sans plage, les plages habituelles s'appliquent.
 """
 
 from __future__ import annotations
@@ -39,6 +46,80 @@ def is_zen_flex_offer(offer_type: str | None, name: str | None) -> bool:
     """Offre EDF Zen Week-End Option Flex : typée ZEN_FLEX (scraper EDF) ou SEASONAL nommée
     « Option Flex » (offres servies par la passerelle)"""
     return (offer_type or "").strip().upper() == "ZEN_FLEX" or "OPTION FLEX" in (name or "").upper()
+
+
+SEASONS_KEY = "seasons"
+# Saison estivale des heures creuses saisonnalisées : du 1er avril au 31 octobre
+SUMMER_MONTHS = frozenset(range(4, 11))
+
+
+def season_of(day: date) -> Literal["summer", "winter"]:
+    """Saison des heures creuses : été du 1er avril au 31 octobre, hiver du 1er novembre au 31 mars"""
+    return "summer" if day.month in SUMMER_MONTHS else "winter"
+
+
+class SeasonalRanges(list[tuple[int, int]]):
+    """Plages HC habituelles (contenu de la liste) et plages par saison à partir d'une date
+
+    S'utilise partout comme une liste de plages : is_offpeak, offpeak_fraction et
+    offpeak_slot_fraction choisissent les plages du jour (cf. ranges_for_day).
+    """
+
+    def __init__(
+        self,
+        base: Iterable[tuple[int, int]],
+        summer: list[tuple[int, int]] | None = None,
+        winter: list[tuple[int, int]] | None = None,
+        since: date | None = None,
+    ) -> None:
+        super().__init__(base)
+        self.summer = list(summer or [])
+        self.winter = list(winter or [])
+        self.since = since
+
+    def for_day(self, day: date) -> list[tuple[int, int]]:
+        if self.since is None or day >= self.since:
+            seasonal = self.summer if season_of(day) == "summer" else self.winter
+            if seasonal:
+                return seasonal
+        return list(self)
+
+
+def ranges_for_day(ranges: list[tuple[int, int]], day: date) -> list[tuple[int, int]]:
+    """Plages HC applicables au jour donné (saisonnières si définies, sinon les plages données)"""
+    return ranges.for_day(day) if isinstance(ranges, SeasonalRanges) else ranges
+
+
+def parse_seasons(raw: Any) -> dict[str, Any] | None:
+    """Lit la clé « seasons » de offpeak_hours : {"since": date|None, "summer": [...], "winter": [...]}
+
+    None quand aucune plage saisonnière n'est saisie.
+    """
+    if not isinstance(raw, dict) or not isinstance(raw.get(SEASONS_KEY), dict):
+        return None
+    seasons = raw[SEASONS_KEY]
+    summer = parse_offpeak_ranges(seasons.get("summer"))
+    winter = parse_offpeak_ranges(seasons.get("winter"))
+    if not summer and not winter:
+        return None
+    since = None
+    if seasons.get("since"):
+        try:
+            since = date.fromisoformat(str(seasons["since"])[:10])
+        except ValueError:
+            logger.warning(f"[TARIFF] Date de début des heures creuses saisonnières illisible : {seasons['since']!r}")
+    return {"since": since, "summer": summer, "winter": winter}
+
+
+def with_seasons(ranges: list[tuple[int, int]], raw: Any) -> list[tuple[int, int]]:
+    """Ajoute aux plages données les plages saisonnières de offpeak_hours (raw), s'il y en a
+
+    Sans plage habituelle, 22h-6h sert avant la date de début et pour une saison non saisie.
+    """
+    seasons = parse_seasons(raw)
+    if not seasons:
+        return ranges
+    return SeasonalRanges(ranges or DEFAULT_OFFPEAK_RANGES, seasons["summer"], seasons["winter"], seasons["since"])
 
 
 @dataclass(frozen=True)
@@ -133,7 +214,7 @@ def parse_offpeak_ranges(raw: Any) -> list[tuple[int, int]]:
         ranges = parse_offpeak_ranges(raw.get("ranges"))
         if ranges:
             return ranges
-        return parse_offpeak_ranges([v for k, v in raw.items() if k != "ranges"])
+        return parse_offpeak_ranges([v for k, v in raw.items() if k not in ("ranges", SEASONS_KEY)])
     if isinstance(raw, list):
         result: list[tuple[int, int]] = []
         for item in raw:
@@ -159,7 +240,7 @@ def is_offpeak(
     if weekend_offpeak and day.weekday() >= 5:
         return True
     t = hour * 60 + minute
-    for start, end in ranges:
+    for start, end in ranges_for_day(ranges, day):
         if start > end:
             if t >= start or t < end:
                 return True
@@ -186,7 +267,7 @@ def offpeak_fraction(
         return 1.0
     end_minute = start_minute + duration
     covered = 0
-    for start, end in ranges:
+    for start, end in ranges_for_day(ranges, day):
         segments = [(start, 24 * 60), (0, end)] if start > end else [(start, end)]
         for seg_start, seg_end in segments:
             # le créneau peut déborder après minuit (23h30 + 60 min) : on compare aussi à la plage du lendemain

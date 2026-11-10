@@ -23,6 +23,7 @@ from ..models.ecowatt import EcoWatt
 from ..models.tempo_day import TempoDay, TempoColor
 from ..models.zen_flex_day import ZenFlexDay, ZenFlexDayType
 from .edf_zen_flex import OFFER_START, paris_today
+from .exporters.tariff import SEASONS_KEY
 from .custom_offers import CUSTOM_PROVIDER_ID, is_custom_provider
 from .upsert import ENERGY_KEY, conflict_target, daily_index_target, dialect_insert, index_exists, is_sqlite
 from ..models.client_mode import (
@@ -193,10 +194,11 @@ class SyncService:
             pdl.activation_date = activation_date
         # Parse offpeak_hours
         offpeak = remote.get("offpeak_hours")
-        if isinstance(offpeak, dict):
-            pdl.offpeak_hours = offpeak
-        elif isinstance(offpeak, list):
-            pdl.offpeak_hours = {"ranges": offpeak}
+        new_offpeak = {"ranges": offpeak} if isinstance(offpeak, list) else offpeak
+        if isinstance(new_offpeak, dict):
+            # Heures creuses saisonnières saisies dans le client : la passerelle ne les connaît pas
+            seasons = pdl.offpeak_hours.get(SEASONS_KEY) if isinstance(pdl.offpeak_hours, dict) else None
+            pdl.offpeak_hours = {**new_offpeak, SEASONS_KEY: seasons} if seasons else new_offpeak
 
     async def sync_pdl_list(self, user_id: str) -> list[dict[str, Any]]:
         """Sync PDL list from remote API to local database

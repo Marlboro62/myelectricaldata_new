@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isOffpeakTime, offpeakFraction, parseOffpeakHours } from '../offpeakHours'
+import { isOffpeakTime, offpeakFraction, offpeakRangesResolver, parseOffpeakHours, parseOffpeakSeasons, seasonOf } from '../offpeakHours'
 
 // Contrat dont les plages HC ne tombent pas sur la demi-heure (cas réel comparé au ZLinky)
 const DECALEES = parseOffpeakHours({ ranges: ['23:32-05:32', '14:32-16:32'] })
@@ -40,5 +40,43 @@ describe('offpeakFraction', () => {
     let hc = 0
     for (let t = 0; t < 1440; t += 30) hc += offpeakFraction(Math.floor(t / 60), t % 60, 30, DECALEES) * 30
     expect(hc).toBe(8 * 60)
+  })
+})
+
+describe('heures creuses saisonnières', () => {
+  const config = {
+    ranges: ['22:00-06:00'],
+    seasons: { since: '2026-11-01', winter: ['00:00-06:00', '22:00-24:00'], summer: ['02:00-06:00', '11:00-15:00'] },
+  }
+
+  it('saison : été du 1er avril au 31 octobre', () => {
+    expect(seasonOf(new Date(2027, 2, 31))).toBe('winter')
+    expect(seasonOf(new Date(2027, 3, 1))).toBe('summer')
+    expect(seasonOf(new Date(2027, 9, 31))).toBe('summer')
+    expect(seasonOf(new Date(2027, 10, 1))).toBe('winter')
+  })
+
+  it('les plages habituelles ignorent la clé seasons', () => {
+    expect(parseOffpeakHours(config)).toEqual([{ startHour: 22, startMin: 0, endHour: 6, endMin: 0 }])
+  })
+
+  it('plages selon la saison, à partir de la date de début', () => {
+    const at = offpeakRangesResolver(config)
+    const midi = (d: Date) => isOffpeakTime(12, 0, at(d))
+    const soir = (d: Date) => isOffpeakTime(23, 0, at(d))
+    expect(midi(new Date(2026, 9, 31))).toBe(false) // avant la date de début : habituelles
+    expect(soir(new Date(2026, 9, 31))).toBe(true)
+    expect(midi(new Date(2027, 6, 14))).toBe(true) // été
+    expect(soir(new Date(2027, 6, 14))).toBe(false)
+    expect(midi(new Date(2027, 0, 14))).toBe(false) // hiver
+    expect(soir(new Date(2027, 0, 14))).toBe(true)
+  })
+
+  it('sans saison saisie : plages habituelles', () => {
+    expect(parseOffpeakSeasons({ ranges: ['22:00-06:00'] })).toBeNull()
+    expect(parseOffpeakSeasons({ ranges: ['22:00-06:00'], seasons: { summer: [], winter: [] } })).toBeNull()
+    const at = offpeakRangesResolver({ ranges: ['22:00-06:00'], seasons: { summer: ['11:00-17:00'] } })
+    expect(at(new Date(2027, 0, 14))).toEqual(parseOffpeakHours(['22:00-06:00']))
+    expect(isOffpeakTime(12, 0, at(new Date(2020, 5, 1)))).toBe(true) // pas de date de début
   })
 })

@@ -7,6 +7,71 @@ export interface OffpeakRange {
   endMin: number
 }
 
+/** Clé des heures creuses saisonnières dans offpeak_hours */
+export const SEASONS_KEY = 'seasons'
+
+export type OffpeakSeason = 'summer' | 'winter'
+
+/** Plages saisies pour chaque saison (format « HH:MM-HH:MM ») et date de début (AAAA-MM-JJ) */
+export interface OffpeakSeasonsConfig {
+  since?: string | null
+  summer?: string[]
+  winter?: string[]
+}
+
+/** Plages saisonnières lues : vides pour une saison non saisie */
+export interface OffpeakSeasons {
+  since: string | null
+  summer: OffpeakRange[]
+  winter: OffpeakRange[]
+}
+
+/**
+ * Saison des heures creuses saisonnalisées (CRE, réforme TURPE 7) :
+ * été du 1er avril au 31 octobre, hiver du 1er novembre au 31 mars.
+ */
+export function seasonOf(date: Date): OffpeakSeason {
+  const month = date.getMonth() + 1
+  return month >= 4 && month <= 10 ? 'summer' : 'winter'
+}
+
+/** Date locale AAAA-MM-JJ (comparable à la date de début) */
+function localDateKey(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/**
+ * Heures creuses saisonnières de offpeak_hours ({"ranges": [...], "seasons": {...}}),
+ * null quand aucune plage saisonnière n'est saisie.
+ */
+export function parseOffpeakSeasons(offpeakConfig?: unknown): OffpeakSeasons | null {
+  if (!offpeakConfig || typeof offpeakConfig !== 'object' || Array.isArray(offpeakConfig)) return null
+  const raw = (offpeakConfig as Record<string, unknown>)[SEASONS_KEY]
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const config = raw as OffpeakSeasonsConfig
+  const summer = parseOffpeakHours(Array.isArray(config.summer) ? config.summer : [])
+  const winter = parseOffpeakHours(Array.isArray(config.winter) ? config.winter : [])
+  if (summer.length === 0 && winter.length === 0) return null
+  const since = typeof config.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(config.since) ? config.since.slice(0, 10) : null
+  return { since, summer, winter }
+}
+
+/**
+ * Plages HC à appliquer selon la date du relevé : plages de la saison à partir de la date de
+ * début, sinon (avant cette date, ou saison non saisie) les plages habituelles.
+ */
+export function offpeakRangesResolver(offpeakConfig?: unknown): (date: Date) => OffpeakRange[] {
+  const base = parseOffpeakHours(offpeakConfig as Parameters<typeof parseOffpeakHours>[0])
+  const seasons = parseOffpeakSeasons(offpeakConfig)
+  if (!seasons) return () => base
+  return (date: Date) => {
+    if (seasons.since && localDateKey(date) < seasons.since) return base
+    const ranges = seasonOf(date) === 'summer' ? seasons.summer : seasons.winter
+    return ranges.length > 0 ? ranges : base
+  }
+}
+
 /**
  * Parse offpeak hours configuration from PDL
  * Supports both array format ["22:00-06:00"] and legacy object format {"HC": "22h00-06h00"}
@@ -22,7 +87,10 @@ export function parseOffpeakHours(offpeakConfig?: string[] | Record<string, stri
   if (Array.isArray(offpeakConfig)) {
     rawValues = offpeakConfig
   } else {
-    rawValues = Object.values(offpeakConfig).flatMap(v => Array.isArray(v) ? v : [v])
+    // « seasons » porte les heures creuses saisonnières (cf. parseOffpeakSeasons), pas les plages habituelles
+    rawValues = Object.entries(offpeakConfig)
+      .filter(([key]) => key !== SEASONS_KEY)
+      .flatMap(([, v]) => Array.isArray(v) ? v : [v])
   }
   const rangeStrings: string[] = rawValues.filter((item): item is string => typeof item === 'string' && Boolean(item))
 

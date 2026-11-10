@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { parseOffpeakHours, offpeakFraction } from '@/utils/offpeakHours'
+import { offpeakRangesResolver, offpeakFraction } from '@/utils/offpeakHours'
 import { useDatePreferencesStore } from '@/stores/datePreferencesStore'
 import { getIntervalLength, getReadings, getUnit, hasReadings, readingEnergyWh, readingHours } from '@/utils/enedisMeasure'
 import type { MeasureReading } from '@/types/api'
@@ -556,7 +556,7 @@ export function useConsumptionCalcs({
       return []
     }
 
-    const offpeakRanges = parseOffpeakHours(selectedPDLDetails?.offpeak_hours)
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours)
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({
       queryKey: ['consumptionDetail', selectedPDL],
@@ -589,7 +589,7 @@ export function useConsumptionCalcs({
         const hour = apiDateTime.getHours()
         const minute = apiDateTime.getMinutes()
         // Part HC au prorata des minutes du créneau (plage HC qui commence ou finit dans le créneau)
-        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRanges)
+        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRangesAt(apiDateTime))
 
         allReadings.push({
           date: apiDateTime,
@@ -648,7 +648,7 @@ export function useConsumptionCalcs({
       return []
     }
 
-    const offpeakRanges = parseOffpeakHours(selectedPDLDetails.offpeak_hours)
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails.offpeak_hours)
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({
       queryKey: ['consumptionDetail', selectedPDL],
@@ -680,7 +680,7 @@ export function useConsumptionCalcs({
         const hour = apiDateTime.getHours()
         const minute = apiDateTime.getMinutes()
         // Part HC au prorata des minutes du créneau (plage HC qui commence ou finit dans le créneau)
-        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRanges)
+        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRangesAt(apiDateTime))
 
         allReadings.push({ date: apiDateTime, energyKwh, hcShare })
       })

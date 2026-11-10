@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { parseOffpeakHours, offpeakFraction } from '@/utils/offpeakHours'
+import { offpeakRangesResolver, offpeakFraction } from '@/utils/offpeakHours'
 import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnergyOffer } from '@/api/energy'
 import type { YearlyCost, MonthlyCost, SelectedOfferWithProvider } from '../types/euro.types'
@@ -142,7 +142,7 @@ export function useConsumptionEuroCalcs({
       return []
     }
 
-    const offpeakRanges = parseOffpeakHours(selectedPDLDetails?.offpeak_hours)
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours)
     const defaultPrices = getOfferPrices(selectedOffer)
     const subscriptionMonthly = parsePrice(selectedOffer.subscription_price)
     const isTempo = selectedOffer.offer_type === 'TEMPO'
@@ -187,7 +187,7 @@ export function useConsumptionEuroCalcs({
 
         const hour = apiDateTime.getHours()
         const minute = apiDateTime.getMinutes()
-        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRanges)
+        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRangesAt(apiDateTime))
 
         allReadings.push({
           date: apiDateTime,

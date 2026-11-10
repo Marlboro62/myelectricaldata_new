@@ -8,6 +8,7 @@ import { syncApi } from '@/api/sync'
 import type { PDL } from '@/types/api'
 import OfferSelector from './OfferSelector'
 import CustomOfferForm from './CustomOfferForm'
+import SeasonalOffpeakEditor from './SeasonalOffpeakEditor'
 
 interface PDLCardProps {
   pdl: PDL
@@ -1153,6 +1154,9 @@ export default function PDLCard({ pdl, onViewDetails, onDelete, isDemo = false, 
                         </div>
                       ))}
                     </div>
+
+                    {/* Heures creuses saisonnières (été / hiver) */}
+                    <SeasonalOffpeakEditor pdlId={pdl.id} offpeakHours={pdl.offpeak_hours} disabled={isDemo} />
                   </div>
                 </div>
               )}

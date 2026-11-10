@@ -27,6 +27,7 @@ Tableau de bord principal pour gérer les Points De Livraison (PDL) et accéder 
 | Sélection offre tarifaire par PDL    | FAIT   | Serveur+Client |
 | Offre aux prix saisis à la main      | FAIT   | Client         |
 | Configuration heures creuses         | FAIT   | Serveur+Client |
+| Heures creuses saisonnières          | FAIT   | Serveur+Client |
 | Mode démo avec données fictives      | FAIT   | Serveur        |
 | Onboarding tour guidé                | FAIT   | Serveur        |
 | Raccourcis clavier                   | FAIT   | Serveur+Client |
@@ -175,6 +176,15 @@ Sous le sélecteur, le lien **« Mon offre n'est pas dans la liste : saisir mes 
 - abonnement en €/mois et prix du kWh TTC ; la virgule décimale est acceptée.
 
 À l'enregistrement, l'offre est créée puis sélectionnée sur le PDL : la page Consommation (€), le simulateur et les exports l'utilisent comme les autres offres. Quand l'offre sélectionnée est une offre saisie, le lien devient **« Modifier mes prix »** et le formulaire propose aussi **« Supprimer cette offre »**. Masqué en mode serveur et en mode démo.
+
+### Heures creuses saisonnières
+
+Sous les plages d'heures creuses, le bloc **« Heures creuses saisonnières »** (composant `SeasonalOffpeakEditor`) suit la réforme des heures creuses (TURPE 7) : plages d'**hiver** (1er novembre → 31 mars) et d'**été** (1er avril → 31 octobre), à partir d'une date.
+
+- Enregistrées dans la clé `seasons` de `offpeak_hours` : `{"ranges": [...], "seasons": {"since": "2026-11-01", "winter": ["22:00-06:00"], "summer": ["02:00-06:00", "11:00-15:00"]}}`.
+- Conservées par la synchronisation (passerelle ou contrat Enedis) et par la modification des plages habituelles ; `"seasons": null` les retire.
+- Avant la date de début, et pour une saison sans plage, les plages habituelles s'appliquent : l'historique garde ses anciennes heures creuses.
+- Utilisées par les pages Consommation (kWh et €) et par les exports (`exporters/tariff.py`, sauf grille fournisseur Zen Flex).
 
 ### Liaison Consommation-Production
 
