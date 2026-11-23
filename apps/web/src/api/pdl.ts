@@ -18,7 +18,7 @@ export const pdlApi = {
     return apiClient.delete(`pdl/${id}`)
   },
 
-  updateContract: async (id: string, data: { subscribed_power?: number; offpeak_hours?: string[] | Record<string, string> }) => {
+  updateContract: async (id: string, data: { subscribed_power?: number; offpeak_hours?: string[] | Record<string, unknown> }) => {
     return apiClient.patch<PDL>(`pdl/${id}/contract`, data)
   },
 

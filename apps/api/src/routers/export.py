@@ -54,6 +54,19 @@ class HomeAssistantConfig(BaseModel):
         default="fr",
         description="Display language of entity names: fr (default) or en (historical names). Only names change, never entity_id",
     )
+    # Groupes de capteurs facultatifs (issue #209) : false = entités non créées et retirées de Home Assistant
+    export_rte_tempo: bool = Field(
+        default=True,
+        description="Export RTE Tempo sensors (tempo_today, tempo_tomorrow). False removes them from Home Assistant",
+    )
+    export_edf_tempo: bool = Field(
+        default=True,
+        description="Export EDF Tempo sensors (tempo_info, tempo_days_*, tempo_price_*). False removes them from Home Assistant",
+    )
+    export_zen_flex: bool = Field(
+        default=True,
+        description="Export EDF Zen Flex sensors (zen_flex_today, zen_flex_tomorrow). False removes them from Home Assistant",
+    )
 
     # WebSocket API mode (Energy Dashboard statistics)
     ha_url: Optional[str] = Field(default=None, description="Home Assistant URL (e.g., http://homeassistant.local:8123)")
@@ -991,11 +1004,11 @@ async def list_ha_statistics(
     if config.export_type != ExportType.HOME_ASSISTANT:
         raise HTTPException(status_code=400, detail="This endpoint is only for Home Assistant exports")
 
-    from ..services.exporters.home_assistant import HomeAssistantExporter
+    from ..services.exporters.home_assistant import HomeAssistantExporter, statistic_prefix
 
     try:
         exporter = HomeAssistantExporter(config.config)
-        prefix = config.config.get("statistic_id_prefix", "myelectricaldata")
+        prefix = statistic_prefix(config.config)
         result = await exporter.list_statistics(prefix)
 
         return {

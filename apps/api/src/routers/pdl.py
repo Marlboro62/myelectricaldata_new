@@ -11,6 +11,7 @@ from ..middleware import get_current_user, require_permission, require_not_demo
 from ..routers.enedis import get_valid_token
 from ..adapters import enedis_adapter
 from ..services.enedis_contract import apply_contract_to_pdl
+from ..services.exporters.tariff import SEASONS_KEY
 import logging
 
 
@@ -651,7 +652,17 @@ async def update_pdl_contract(
         pdl.subscribed_power = contract_data.subscribed_power
 
     if contract_data.offpeak_hours is not None:
-        pdl.offpeak_hours = contract_data.offpeak_hours  # type: ignore
+        new_offpeak = contract_data.offpeak_hours
+        if isinstance(new_offpeak, list):
+            new_offpeak = {"ranges": new_offpeak}
+        # Heures creuses saisonnières : conservées quand seules les plages habituelles changent,
+        # retirées par « seasons »: null
+        old_seasons = pdl.offpeak_hours.get(SEASONS_KEY) if isinstance(pdl.offpeak_hours, dict) else None
+        if SEASONS_KEY not in new_offpeak and old_seasons:
+            new_offpeak = {**new_offpeak, SEASONS_KEY: old_seasons}
+        elif SEASONS_KEY in new_offpeak and not new_offpeak[SEASONS_KEY]:
+            new_offpeak = {k: v for k, v in new_offpeak.items() if k != SEASONS_KEY}
+        pdl.offpeak_hours = new_offpeak  # type: ignore
 
     await db.commit()
     await db.refresh(pdl)

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { parseOffpeakHours, offpeakFraction } from '@/utils/offpeakHours'
+import { offpeakRangesResolver, offpeakFraction } from '@/utils/offpeakHours'
 import { tempoApi, type TempoDay } from '@/api/tempo'
 import type { EnergyOffer } from '@/api/energy'
 import type { YearlyCost, MonthlyCost, SelectedOfferWithProvider } from '../types/euro.types'
@@ -142,10 +142,11 @@ export function useConsumptionEuroCalcs({
       return []
     }
 
-    const offpeakRanges = parseOffpeakHours(selectedPDLDetails?.offpeak_hours)
+    const isTempo = selectedOffer.offer_type === 'TEMPO'
+    // Tempo : heures creuses fixes, les plages saisonnières ne s'appliquent pas
+    const offpeakRangesAt = offpeakRangesResolver(selectedPDLDetails?.offpeak_hours, { ignoreSeasons: isTempo })
     const defaultPrices = getOfferPrices(selectedOffer)
     const subscriptionMonthly = parsePrice(selectedOffer.subscription_price)
-    const isTempo = selectedOffer.offer_type === 'TEMPO'
 
     const queryCache = queryClient.getQueryCache()
     const allDetailQueries = queryCache.findAll({
@@ -187,7 +188,7 @@ export function useConsumptionEuroCalcs({
 
         const hour = apiDateTime.getHours()
         const minute = apiDateTime.getMinutes()
-        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRanges)
+        const hcShare = offpeakFraction(hour, minute, readingHours(reading, intervalLength) * 60, offpeakRangesAt(apiDateTime))
 
         allReadings.push({
           date: apiDateTime,
@@ -347,6 +348,10 @@ export function useConsumptionEuroCalcs({
       const hcCost = months.reduce((sum, m) => sum + m.hcCost, 0)
       const hpCost = months.reduce((sum, m) => sum + m.hpCost, 0)
       const totalCost = consumptionCost + subscriptionCost
+      // Moyennes sur les jours couverts : une période du 14 nov. au 13 nov. touche 13 mois du calendrier
+      // (deux mois partiels) mais ne compte que 12 mois de données
+      const days = months.reduce((sum, m) => sum + m.daysWithData, 0)
+      const MONTH_DAYS = 365.25 / 12
 
       return {
         year: period.label,
@@ -360,8 +365,10 @@ export function useConsumptionEuroCalcs({
         subscriptionCost,
         hcCost,
         hpCost,
-        avgMonthlyCost: months.length > 0 ? totalCost / months.length : 0,
-        avgMonthlyKwh: months.length > 0 ? totalKwh / months.length : 0
+        days,
+        avgDailyCost: days > 0 ? totalCost / days : 0,
+        avgMonthlyCost: days > 0 ? (totalCost / days) * MONTH_DAYS : 0,
+        avgMonthlyKwh: days > 0 ? (totalKwh / days) * MONTH_DAYS : 0
       }
     }).filter(p => p.months.length >= 1) // Include periods with at least 1 month of data
 

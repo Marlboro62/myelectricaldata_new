@@ -133,7 +133,10 @@ def apply_contract_to_pdl(pdl: Any, contract: dict[str, Any], log_prefix: str = 
     if parsed["subscribed_power"] is not None:
         pdl.subscribed_power = parsed["subscribed_power"]
     if parsed["offpeak_hours"] is not None:
-        pdl.offpeak_hours = parsed["offpeak_hours"]
+        # Heures creuses saisonnières saisies dans l'interface : absentes du contrat, conservées
+        seasons = pdl.offpeak_hours.get("seasons") if isinstance(pdl.offpeak_hours, dict) else None
+        offpeak = parsed["offpeak_hours"]
+        pdl.offpeak_hours = {**offpeak, "seasons": seasons} if seasons and isinstance(offpeak, dict) else offpeak
     if parsed["activation_date"] is not None:
         pdl.activation_date = parsed["activation_date"]
     logger.info(

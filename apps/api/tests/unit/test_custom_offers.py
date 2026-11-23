@@ -192,7 +192,7 @@ async def test_la_synchro_des_pdl_garde_l_option_d_une_offre_saisie(db):
                selected_offer_id=custom["id"], pricing_option="BASE"))
     db.add(PDL(id=str(uuid.uuid4()), usage_point_id="22222222222222", user_id="user-1",
                selected_offer_id=custom["id"], pricing_option="BASE"))
-    # Témoin : offre de la passerelle, la passerelle reste maîtresse de l'option (comportement inchangé)
+    # Offre du catalogue (issue hassio-addons#48) : son option garde elle aussi la main sur la passerelle
     db.add(PDL(id=str(uuid.uuid4()), usage_point_id="33333333333333", user_id="user-1",
                selected_offer_id="zen-fixe", pricing_option="BASE"))
     await db.commit()
@@ -208,4 +208,29 @@ async def test_la_synchro_des_pdl_garde_l_option_d_une_offre_saisie(db):
     await service.sync_pdl_list("user-1")
 
     options = {p.usage_point_id: p.pricing_option for p in (await db.execute(select(PDL))).scalars()}
-    assert options == {"11111111111111": "BASE", "22222222222222": "BASE", "33333333333333": "HC_HP"}
+    assert options == {"11111111111111": "BASE", "22222222222222": "BASE", "33333333333333": "BASE"}
+
+
+async def test_la_synchro_des_pdl_garde_l_option_de_l_offre_du_catalogue(db):
+    """Issue hassio-addons#48 : offre EDF Tarif Bleu HC/HP choisie, passerelle en BASE. Après un
+    redémarrage, l'option repassait en BASE et l'export HA ne trouvait plus de prix."""
+    db.add(EnergyProvider(id="edf", name="EDF"))
+    db.add(EnergyOffer(id="tarif-bleu-hc", provider_id="edf", name="Tarif Bleu", offer_type="HC_HP",
+                       subscription_price=Decimal("20.00"), hc_price=Decimal("0.17"), hp_price=Decimal("0.21")))
+    db.add(PDL(id=str(uuid.uuid4()), usage_point_id="44444444444444", user_id="user-1",
+               selected_offer_id="tarif-bleu-hc", pricing_option="HC_HP"))
+    # Sans offre choisie : la passerelle reste maîtresse de l'option
+    db.add(PDL(id=str(uuid.uuid4()), usage_point_id="55555555555555", user_id="user-1", pricing_option="BASE"))
+    await db.commit()
+
+    service = SyncService.__new__(SyncService)
+    service.db = db
+    service.adapter = SimpleNamespace(get_usage_points=AsyncMock(return_value={"usage_points": [
+        {"usage_point_id": "44444444444444", "pricing_option": "BASE"},
+        {"usage_point_id": "55555555555555", "pricing_option": "HC_HP"},
+    ]}), set_shared_owners=MagicMock())
+
+    await service.sync_pdl_list("user-1")
+
+    options = {p.usage_point_id: p.pricing_option for p in (await db.execute(select(PDL))).scalars()}
+    assert options == {"44444444444444": "HC_HP", "55555555555555": "HC_HP"}

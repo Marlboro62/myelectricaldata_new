@@ -34,6 +34,24 @@ class RateLimitExceededError(Exception):
         self.retry_after = retry_after
 
 
+class GatewayHTTPError(httpx.HTTPStatusError):
+    """Refus HTTP de la passerelle sans corps JSON (page HTML de nginx pendant une maintenance, proxy...).
+
+    Reste un HTTPStatusError (statut toujours reconnu par les appelants), avec un message lisible au lieu
+    de l'erreur de lecture JSON « Expecting value: line 1 column 1 (char 0) ».
+    """
+
+
+def _gateway_http_error(error: httpx.HTTPStatusError) -> GatewayHTTPError:
+    response = error.response
+    status = f"HTTP {response.status_code} {response.reason_phrase}".strip()
+    if response.status_code >= 500:
+        message = f"Passerelle MyElectricalData indisponible ({status}), nouvel essai à la prochaine synchro"
+    else:
+        message = f"Passerelle MyElectricalData : requête refusée ({status})"
+    return GatewayHTTPError(message, request=error.request, response=response)
+
+
 def _quota_refusal(body: Any) -> str | None:
     """Message du refus de quota porté par une réponse 200 de la passerelle, None sinon.
 
@@ -185,18 +203,23 @@ class MyElectricalDataAdapter:
             if e.response.status_code in expected_statuses:
                 logger.info(f"[MED] {method} {endpoint} : HTTP {e.response.status_code} (réponse attendue)")
                 raise
+
+            try:
+                error_data = e.response.json()
+            except ValueError:
+                # Corps non JSON (page HTML d'un 503 nginx...) : l'erreur de lecture JSON masquait le statut HTTP
+                gateway_error = _gateway_http_error(e)
+                logger.error(f"[MED] {gateway_error}")
+                raise gateway_error from e
+
             logger.error(f"[MED] API error: {e.response.status_code}")
             logger.error(f"[MED] Response: {e.response.text}")
 
             # Try to parse error response
-            try:
-                error_data = e.response.json()
-                if "error" in error_data:
-                    raise ValueError(
-                        f"{error_data.get('error')}: {error_data.get('error_description', '')}"
-                    ) from e
-            except (KeyError, TypeError):
-                pass
+            if isinstance(error_data, dict) and "error" in error_data:
+                raise ValueError(
+                    f"{error_data.get('error')}: {error_data.get('error_description', '')}"
+                ) from e
 
             raise
         except Exception as e:
